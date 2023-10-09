@@ -2,3 +2,6 @@
 .idea
 .env
 venv
+__pycache__
+config.json
+gcs_key.json
