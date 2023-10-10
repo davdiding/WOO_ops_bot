@@ -1,7 +1,7 @@
 import pandas as pd
 from datetime import datetime as dt
 from lib.utils import send_message
-from lib.utils import CMCGrabber, Tools
+from lib.utils import Grabber, Tools
 
 
 class ListingJob:
@@ -18,11 +18,12 @@ class ListingJob:
         send_message(token=bot_key, message=f"{dt.today().date()} START LISTING DB RENEW", chat_id=chat_id)
         
         tool = Tools()
+        grabber = Grabber()
         
-        listing_db = tool.get_listing_db(exchange_name=exchange_name, exchange_slug=exchange_slug)
-        woo_listing = tool.get_woo_listing()
+        listing_db = grabber.get_listing_info()
+        woo_listing = grabber.get_woo_listing()
         listing_db = pd.concat([listing_db, woo_listing], axis=0)
-        tool.write_db(source=listing_db, path=tool.listing_db_path, index=False)
+        tool.to_db(name="listing", data=listing_db, index=False)
         
         send_message(token=bot_key, message=f"{dt.today().date()} FINISH LISTING DB RENEW", chat_id=chat_id)
     
@@ -37,7 +38,7 @@ class VolumeJob:
         chat_id = self.config["DAVID_CHAT_ID"]
         send_message(token=bot_key, message=f"{dt.today().date()} START VOLUME DB RENEW", chat_id=chat_id)
         
-        grabber = CMCGrabber()
+        grabber = Grabber()
         tools = Tools()
         token_info = grabber.get_token_info(num=num)
         new_db = pd.concat([tools.volume_db, token_info], axis=0)
