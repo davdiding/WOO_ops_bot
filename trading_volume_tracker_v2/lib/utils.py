@@ -41,7 +41,7 @@ class Grabber(BaseClient):
     BLACK_LIST = "BLACK_LIST"
     EXCHANGE_INFO = "EXCHANGE_INFO"
     TOKEN_INFO_URL = "https://pro-api.coinmarketcap.com/v1/cryptocurrency/listings/latest"
-    
+
     WOO_LISTING_URL = "https://api.woo.org/v1/public/info"
 
     def __init__(self):
@@ -65,19 +65,19 @@ class Grabber(BaseClient):
                 except KeyError as e:
                     logging.warning(f"{kwargs['symbol']} KeyError: {e}")
                     return pd.DataFrame()
-    
+
             elif category == "market_number":
                 return int(response["data"]["numMarketPairs"])
-            
+
             elif category == "listing":
-                return [i['baseSymbol'] for i in response['data']['marketPairs']]
-            
+                return [i["baseSymbol"] for i in response["data"]["marketPairs"]]
+
             elif category == "woo_listing":
-                token = [i["symbol"].split("_")[1].upper() for i in response['rows']]
-                cat = [i["symbol"].split("_")[0].lower() for i in response['rows']]
+                token = [i["symbol"].split("_")[1].upper() for i in response["rows"]]
+                cat = [i["symbol"].split("_")[0].lower() for i in response["rows"]]
                 cat = ["perpetual" if i == "perp" else i for i in cat]
                 woo = pd.DataFrame({"symbol": token, "type": cat})
-                woo['exchange'] = "WOO Network"
+                woo["exchange"] = "WOO Network"
                 return woo
 
         except Exception as e:
@@ -90,7 +90,6 @@ class Grabber(BaseClient):
                 return 0
             elif category == "listing":
                 return []
-            
 
     @staticmethod
     def _create_volume_url(
@@ -100,12 +99,14 @@ class Grabber(BaseClient):
             f"https://api.coinmarketcap.com/data-api/v3/cryptocurrency/market-pairs/latest?"
             f"slug={slug}&start={start}&limit={limit}&category={cat}&centerType=all&sort=cmc_rank_advanced"
         )
+
     @staticmethod
     def _create_listing_url(
-            slug: str, start: Optional[int] = 1, limit: Optional[int] = 1, cat: Optional[str] = "spot"
+        slug: str, start: Optional[int] = 1, limit: Optional[int] = 1, cat: Optional[str] = "spot"
     ) -> str:
         return (
-            f"https://api.coinmarketcap.com/data-api/v3/exchange/market-pairs/latest?slug={slug}&category={cat}&start={start}&limit={limit}"
+            f"https://api.coinmarketcap.com/data-api/v3/exchange/market-pairs/latest?"
+            f"slug={slug}&category={cat}&start={start}&limit={limit}"
         )
 
     def _get_token_info(self, num: int) -> pd.DataFrame:
@@ -167,12 +168,12 @@ class Grabber(BaseClient):
 
         token_info.fillna(0, inplace=True)
         return token_info.set_index("symbol")
-    
-    def _get_listing_info(self, slug: str, cat: Optional[str] = 'spot', limit: Optional[int] = 1000) -> list:
+
+    def _get_listing_info(self, slug: str, cat: Optional[str] = "spot", limit: Optional[int] = 1000) -> list:
         market_number = self._get_exchange_market_number(slug=slug, cat=cat)
         if market_number == 0:
             return []
-        
+
         start = 1
         results = []
         while start <= market_number:
@@ -181,30 +182,28 @@ class Grabber(BaseClient):
             results += self._handle_response(response=response, category="listing")
             start += limit
         return list(set(results))
-        
+
     def get_listing_info(self) -> pd.DataFrame:
         exchange_info = self.config[self.EXCHANGE_INFO]
-        
+
         results = pd.DataFrame()
-        
+
         for cat in ["spot", "perpetual"]:
             for name, slug in exchange_info.items():
                 logging.info(f"Start getting listing info for {name} - {cat}")
                 tokens = self._get_listing_info(slug=slug, cat=cat)
                 result = pd.DataFrame({"exchange": name, "symbol": tokens, "type": cat})
                 results = pd.concat([results, result], axis=0)
-                
+
         return results
-        
+
     def _get_exchange_market_number(self, slug: str, cat: str) -> int:
         url = self._create_listing_url(slug=slug, cat=cat)
         return self._handle_response(response=rq.get(url).json(), category="market_number")
-    
+
     def get_woo_listing(self):
         response = rq.get(self.WOO_LISTING_URL).json()
         return self._handle_response(response=response, category="woo_listing")
-        
-        
 
 
 class Tools(BaseClient):
@@ -227,7 +226,7 @@ class Tools(BaseClient):
             "listing": {
                 "path": self.LISTING_DB_PATH,
                 "type": "csv",
-            }
+            },
         }
 
     def _init_volume_db(self):
@@ -235,7 +234,7 @@ class Tools(BaseClient):
             return pd.read_csv(self.VOLUME_DB_PATH).set_index("symbol")
         else:
             return pd.DataFrame()
-        
+
     def _init_listing_db(self):
         if os.path.exists(self.LISTING_DB_PATH):
             return pd.read_csv(self.LISTING_DB_PATH).set_index("symbol")
@@ -250,7 +249,7 @@ class Tools(BaseClient):
             if self.db_map[name]["type"] == "csv":
                 data.to_csv(self.db_map[name]["path"], index=index)
                 return True
-        
+
     def to_online_db(self, name: str, data: pd.DataFrame, index: Optional[bool] = False) -> bool:
         if name in self.db_map.keys():
             if self.db_map[name]["type"] == "csv":
@@ -258,5 +257,9 @@ class Tools(BaseClient):
                     data = data.reset_index()
                 self.db_map[name]["online"][0].set_dataframe(data, "A1")
                 return True
-        
-        
+
+    def _get_volume_record(self, date):
+        pass
+
+    def get_unlisted_token_with_top_volume(self, cat: str) -> str:
+        pass
