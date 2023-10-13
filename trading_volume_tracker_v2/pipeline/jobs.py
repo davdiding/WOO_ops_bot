@@ -63,6 +63,10 @@ class ReportJob:
         self.config = config
         self.name = "ReportJob"
         
-    def run(self):
-        pass
-    
+    def run(self, date: str):
+        bot_key = self.config["BOT_KEY"]
+        chat_id = self.config["DAVID_CHAT_ID"]
+
+        date = dt.strptime(date, "%Y%m%d")
+        day = date.strftime("%A")
+        print(day)

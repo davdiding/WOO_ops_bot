@@ -28,6 +28,8 @@ class BaseClient:
         parser.add_argument("--volume", action="store_true", help="Update trading volume")
         parser.add_argument("--listing", action="store_true", help="Update listing")
         parser.add_argument("--cleaning", action="store_true", help="Clean db")
+        parser.add_argument("--report", action="store_true", help="Send weekly report")
+        parser.add_argument("--date", type=str, help="Date of the report")
         parser.add_argument("--num", type=int, help="Number of items")
         return parser
 

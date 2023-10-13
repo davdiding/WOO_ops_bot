@@ -1,7 +1,7 @@
 import argparse
 import os
 import json
-from pipeline.jobs import VolumeJob, ListingJob, CleaningJob
+from pipeline.jobs import VolumeJob, ListingJob, CleaningJob, ReportJob
 from lib.utils import BaseClient
 
 
@@ -22,6 +22,9 @@ class JobManager(BaseClient):
         elif args.cleaning:
             job = CleaningJob(self.config)
             job.run()
+        elif args.report:
+            job = ReportJob(self.config)
+            job.run(date=args.date)
             
 
 if __name__ == "__main__":
