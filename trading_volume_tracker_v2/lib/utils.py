@@ -3,6 +3,7 @@ import json
 import logging
 import os
 from datetime import datetime as dt
+from datetime import timedelta as td
 from typing import Optional
 
 import pandas as pd
@@ -18,6 +19,8 @@ def send_message(token, message, chat_id):
 class BaseClient:
     CURRENT_PATH = os.path.abspath(os.path.dirname(__file__))
     CONFIG_PATH = os.path.join(CURRENT_PATH, "config.json")
+    
+    BLACK_LIST = ['USDT', 'USDC', 'USDP', "DAI", "USDD", 'TUSD', 'BUSD']
 
     def _init_config(self):
         return json.load(open(self.CONFIG_PATH, "r"))
@@ -40,8 +43,6 @@ class BaseClient:
 
 class Grabber(BaseClient):
     CMC_API_KEY = "CMC_API_KEY"
-    BLACK_LIST = "BLACK_LIST"
-    EXCHANGE_INFO = "EXCHANGE_INFO"
     TOKEN_INFO_URL = "https://pro-api.coinmarketcap.com/v1/cryptocurrency/listings/latest"
 
     WOO_LISTING_URL = "https://api.woo.org/v1/public/info"
@@ -75,11 +76,11 @@ class Grabber(BaseClient):
                 return [i["baseSymbol"] for i in response["data"]["marketPairs"]]
 
             elif category == "woo_listing":
-                token = [i["symbol"].split("_")[1].upper() for i in response["rows"]]
+                token = [i["symbol"].split("_")[1].upper().replace("1000", "") for i in response["rows"]]
                 cat = [i["symbol"].split("_")[0].lower() for i in response["rows"]]
                 cat = ["perpetual" if i == "perp" else i for i in cat]
                 woo = pd.DataFrame({"symbol": token, "type": cat})
-                woo["exchange"] = "WOO Network"
+                woo["exchange"] = "WOO"
                 return woo
 
         except Exception as e:
@@ -152,7 +153,7 @@ class Grabber(BaseClient):
 
     def get_token_info(self, num: Optional[int] = 1000):
         token_info = self._get_token_info(num=num)
-        token_info.query(f"symbol not in {self.config[self.BLACK_LIST]}", inplace=True)
+        token_info.query(f"symbol not in {self.BLACK_LIST}", inplace=True)
 
         for cat in ["spot", "perpetual"]:
             token_info[f"{cat}_volume"] = token_info["slug"].apply(lambda x: self._get_token_volume(token=x, cat=cat))
@@ -185,8 +186,7 @@ class Grabber(BaseClient):
             start += limit
         return list(set(results))
 
-    def get_listing_info(self) -> pd.DataFrame:
-        exchange_info = self.config[self.EXCHANGE_INFO]
+    def get_listing_info(self, exchange_info: dict) -> pd.DataFrame:
 
         results = pd.DataFrame()
 
@@ -239,7 +239,7 @@ class Tools(BaseClient):
 
     def _init_listing_db(self):
         if os.path.exists(self.LISTING_DB_PATH):
-            return pd.read_csv(self.LISTING_DB_PATH).set_index("symbol")
+            return pd.read_csv(self.LISTING_DB_PATH)
         else:
             return pd.DataFrame()
 
@@ -260,8 +260,52 @@ class Tools(BaseClient):
                 self.db_map[name]["online"][0].set_dataframe(data, "A1")
                 return True
 
-    def _get_volume_record(self, date):
-        pass
+    @staticmethod
+    def _get_date_list(date: str) -> dict:
+        input_date = dt.strptime(date, "%Y%m%d")
+        weekday = input_date.weekday()
 
-    def get_unlisted_token_with_top_volume(self, cat: str) -> str:
-        pass
+        current_week = [dt.strftime(input_date - td(days=i), "%Y-%m-%d") for i in range(weekday + 1)]
+        last_week = [dt.strftime(input_date - td(days=i), "%Y-%m-%d") for i in range(weekday + 1, weekday + 8)]
+
+        current_week.reverse()
+        last_week.reverse()
+
+        return {"current_week": current_week, "last_week": last_week}
+
+    def _get_volume_record(self, date: str, cat: str) -> tuple:
+        volume_db_columns = [
+            "date",
+            "symbol",
+            f"{cat}_volume",
+            "cmc_rank",
+        ]
+        if cat != "total":
+            volume_db_columns.append(f"{cat}_percentage")
+
+        volume_db = self._init_volume_db().reset_index()[volume_db_columns]
+        volume_db.columns = (
+            ["date", "symbol", "volume", "cap_rank", "percentage"]
+            if cat != "total"
+            else ["date", "symbol", "volume", "cap_rank"]
+        )
+        date_dict = self._get_date_list(date)
+
+        return volume_db.query(f"date in @date_dict['current_week']"), volume_db.query(
+            f"date in @date_dict['last_week']"
+        )
+    
+    def _get_exchange_listing(self, exchange: str, cat):
+        listing_db = self._init_listing_db()
+        if cat == 'total':
+            return sorted(listing_db.query("exchange == @exchange")['symbol'].unique().tolist())
+        else:
+            return sorted(listing_db.query("exchange == @exchange and type == @cat")['symbol'].unique().tolist())
+        
+    def get_unlisted_token_with_top_volume(self, date: str, cat: str) -> pd.DataFrame:
+        woo_listing = self._get_exchange_listing('WOO', cat)
+        vol, last_vol = self._get_volume_record(date, cat)
+        vol = vol.query("symbol not in @woo_listing and symbol not in @self.BLACK_LIST")
+        last_vol = last_vol.query("symbol not in @woo_listing and symbol not in @self.BLACK_LIST")
+        
+        return
