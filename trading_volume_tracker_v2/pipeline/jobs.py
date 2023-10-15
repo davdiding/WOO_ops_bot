@@ -12,15 +12,25 @@ class ListingJob:
     def run(self):
         bot_key = self.config["BOT_KEY"]
         chat_id = self.config["DAVID_CHAT_ID"]
-        exchange_name = self.config["EXCHANGE_NAME"]
-        exchange_slug = self.config["EXCHANGE_SLUG"]
+        exchange_info = {
+            "binance": "binance",
+            'houbi': 'huobi-global',
+            'okx': 'okx',
+            'gate.io': 'gate-io',
+            'kraken': 'kraken',
+            'coinbase': 'coinbase-exchange',
+            'crypto.com': 'crypto-com-exchange',
+            'kucoin': 'kucoin',
+            'bitfinex': 'bitfinex',
+            'bybit': 'bybit'
+        }
         
         send_message(token=bot_key, message=f"{dt.today().date()} START LISTING DB RENEW", chat_id=chat_id)
         
         tool = Tools()
         grabber = Grabber()
         
-        listing_db = grabber.get_listing_info()
+        listing_db = grabber.get_listing_info(exchange_info=exchange_info)
         woo_listing = grabber.get_woo_listing()
         listing_db = pd.concat([listing_db, woo_listing], axis=0)
         tool.to_db(name="listing", data=listing_db, index=False)
@@ -61,8 +71,14 @@ class CleaningJob:
 class ReportJob:
     def __init__(self, config):
         self.config = config
+        self.tools = Tools()
         self.name = "ReportJob"
         
-    def run(self):
-        pass
-    
+    def run(self, date: str):
+        bot_key = self.config["BOT_KEY"]
+        chat_id = self.config["DAVID_CHAT_ID"]
+
+        
+        # top 10
+        res = self.tools.get_unlisted_token_with_top_volume(date, 'total')
+        return
