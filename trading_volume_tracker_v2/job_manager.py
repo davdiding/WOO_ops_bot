@@ -1,16 +1,12 @@
-import argparse
-import os
-import json
-from pipeline.jobs import VolumeJob, ListingJob, CleaningJob, ReportJob
 from lib.utils import BaseClient
+from pipeline.jobs import CleaningJob, ListingJob, ReportJob, VolumeJob
 
 
 class JobManager(BaseClient):
-    
     def __init__(self):
         self.parser = self._init_args()
         self.config = self._init_config()
-    
+
     def run(self):
         args = self.parser.parse_args()
         if args.volume:
@@ -24,8 +20,12 @@ class JobManager(BaseClient):
             job.run()
         elif args.report:
             job = ReportJob(self.config)
-            job.run(date=args.date)
-            
+
+            if args.report_cat:
+                job.run(date=args.date, cat=args.report_cat, num=args.report_num)
+            else:
+                job.run(date=args.date, num=args.report_num)
+
 
 if __name__ == "__main__":
     job_manager = JobManager()
