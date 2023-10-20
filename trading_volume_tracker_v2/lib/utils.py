@@ -1,14 +1,17 @@
 import argparse
 import json
 import logging
+import math
 import os
 from datetime import datetime as dt
 from datetime import timedelta as td
+from decimal import Decimal
 from typing import Optional
 
 import pandas as pd
 import pygsheets
 import requests as rq
+from beautifultable import BeautifulTable
 
 
 def send_message(token, message, chat_id):
@@ -19,8 +22,8 @@ def send_message(token, message, chat_id):
 class BaseClient:
     CURRENT_PATH = os.path.abspath(os.path.dirname(__file__))
     CONFIG_PATH = os.path.join(CURRENT_PATH, "config.json")
-    
-    BLACK_LIST = ['USDT', 'USDC', 'USDP', "DAI", "USDD", 'TUSD', 'BUSD']
+
+    BLACK_LIST = ["USDT", "USDC", "USDP", "DAI", "USDD", "TUSD", "BUSD", "WBTC", "FDUSD", "LUNA"]
 
     def _init_config(self):
         return json.load(open(self.CONFIG_PATH, "r"))
@@ -33,12 +36,61 @@ class BaseClient:
         parser.add_argument("--cleaning", action="store_true", help="Clean db")
         parser.add_argument("--report", action="store_true", help="Send weekly report")
         parser.add_argument("--date", type=str, help="Date of the report")
+        parser.add_argument("--report_cat", type=str, help="")
+        parser.add_argument("--report_num", type=int, help="", default=20)
         parser.add_argument("--num", type=int, help="Number of items")
         return parser
 
     @staticmethod
     def _init_logger():
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+
+
+class Formatter:
+    @staticmethod
+    def millify(n, k: int = 3) -> str:
+        def remove_exponent(num):
+            return num.to_integral() if num == num.to_integral() else num.normalize()
+
+        millnames = ["", "K", "M", "B", "T"]
+        n = float(n)
+        millidx = max(0, min(len(millnames) - 1, int(math.floor(0 if n == 0 else math.log10(abs(n)) / 3))))
+
+        simplified_num = n / 10 ** (3 * millidx)
+        digit = max(k - (len(str(simplified_num).split(".")[0])), 0)
+
+        simplified_num = remove_exponent(Decimal(str(round(simplified_num, digit))))
+
+        return f"{simplified_num}{millnames[millidx]}"
+
+    def create_bt_from_df(self, df: pd.DataFrame, name: str) -> str:
+        table = BeautifulTable()
+        table.columns.header = df.columns.to_list()
+
+        if name == "top":
+            for index, row in df.iterrows():
+                table.rows.append(
+                    [
+                        row[0],
+                        self.millify(row[1]),
+                        f"{self.millify(row[2]*100)}%",
+                        self.millify(row[3], k=1),
+                    ]
+                )
+
+        for i in range(len(df.columns)):
+            if i == 0:
+                table.columns.alignment[df.columns[i]] = BeautifulTable.ALIGN_LEFT
+            else:
+                table.columns.alignment[df.columns[i]] = BeautifulTable.ALIGN_RIGHT
+
+        table.set_style(BeautifulTable.STYLE_BOX)
+
+        data_width = 22 // (len(df.columns) - 1)
+        table.columns.width = [8] + [data_width] * (len(df.columns) - 1)
+
+        table_text = f"<pre>{table}</pre>"
+        return table_text
 
 
 class Grabber(BaseClient):
@@ -208,7 +260,7 @@ class Grabber(BaseClient):
         return self._handle_response(response=response, category="woo_listing")
 
 
-class Tools(BaseClient):
+class Tools(BaseClient, Formatter):
     VOLUME_DB_PATH = os.path.join(BaseClient.CURRENT_PATH, "../db/volume_db.csv")
     LISTING_DB_PATH = os.path.join(BaseClient.CURRENT_PATH, "../db/listing_db.csv")
     GCS_KEY_PATH = os.path.join(BaseClient.CURRENT_PATH, "gcs_key.json")
@@ -261,7 +313,7 @@ class Tools(BaseClient):
                 return True
 
     @staticmethod
-    def _get_date_list(date: str) -> dict:
+    def _get_dates(date: str) -> dict:
         input_date = dt.strptime(date, "%Y%m%d")
         weekday = input_date.weekday()
 
@@ -273,39 +325,58 @@ class Tools(BaseClient):
 
         return {"current_week": current_week, "last_week": last_week}
 
-    def _get_volume_record(self, date: str, cat: str) -> tuple:
+    def _get_volume_record(self, dates: list) -> pd.DataFrame:
         volume_db_columns = [
             "date",
             "symbol",
-            f"{cat}_volume",
+            "total_volume",
+            "spot_volume",
+            "perpetual_volume",
             "cmc_rank",
         ]
-        if cat != "total":
-            volume_db_columns.append(f"{cat}_percentage")
 
-        volume_db = self._init_volume_db().reset_index()[volume_db_columns]
-        volume_db.columns = (
-            ["date", "symbol", "volume", "cap_rank", "percentage"]
-            if cat != "total"
-            else ["date", "symbol", "volume", "cap_rank"]
-        )
-        date_dict = self._get_date_list(date)
+        volume_db = self._init_volume_db().reset_index()[volume_db_columns].query("date in @dates")
 
-        return volume_db.query(f"date in @date_dict['current_week']"), volume_db.query(
-            f"date in @date_dict['last_week']"
-        )
-    
+        return volume_db.drop(["date"], axis=1)
+
     def _get_exchange_listing(self, exchange: str, cat):
         listing_db = self._init_listing_db()
-        if cat == 'total':
-            return sorted(listing_db.query("exchange == @exchange")['symbol'].unique().tolist())
+        if cat == "total":
+            return sorted(listing_db.query("exchange == @exchange")["symbol"].unique().tolist())
         else:
-            return sorted(listing_db.query("exchange == @exchange and type == @cat")['symbol'].unique().tolist())
-        
+            return sorted(listing_db.query("exchange == @exchange and type == @cat")["symbol"].unique().tolist())
+
     def get_unlisted_token_with_top_volume(self, date: str, cat: str) -> pd.DataFrame:
-        woo_listing = self._get_exchange_listing('WOO', cat)
-        vol, last_vol = self._get_volume_record(date, cat)
-        vol = vol.query("symbol not in @woo_listing and symbol not in @self.BLACK_LIST")
-        last_vol = last_vol.query("symbol not in @woo_listing and symbol not in @self.BLACK_LIST")
-        
-        return
+        date_dict = self._get_dates(date)
+        woo_listing = self._get_exchange_listing("WOO", cat)
+        vol = self._get_volume_record(date_dict["current_week"])
+
+        vol = (
+            vol.query("symbol not in @woo_listing and symbol not in @self.BLACK_LIST")
+            .groupby("symbol")
+            .mean()
+            .sort_values(by=f"{cat}_volume", ascending=False)
+            .reset_index()
+            .query(f"{cat}_volume > 0")
+            .eval(
+                f"{'spot' if cat == 'total' else cat}_percentage = "
+                f"({'spot' if cat == 'total' else cat}_volume / total_volume)"
+            )
+        )
+
+        if cat == "total":
+            columns_map = {
+                "symbol": "Ccy",
+                "total_volume": "Total volume (USD)",
+                "spot_percentage": "Spot perc (%)",
+                "cmc_rank": "Cap rank",
+            }
+        else:
+            columns_map = {
+                "symbol": "Ccy",
+                f"{cat}_volume": f"{cat} volume (USD)",
+                f"{cat}_percentage": f"{cat} perc (%)",
+                "cmc_rank": "Cap rank",
+            }
+
+        return vol[list(columns_map.keys())].rename(columns=columns_map)
