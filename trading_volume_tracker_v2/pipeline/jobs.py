@@ -80,8 +80,18 @@ class ReportJob:
         chat_id = self.config["DAVID_CHAT_ID"]
 
         # top 10
-        unlisted_token_with_top_volume = self.tools.get_unlisted_token_with_top_volume(date, cat)
+        unlisted_token_with_top_volume = (
+            self.tools.get_unlisted_token_with_top_volume(date, cat)
+            .iloc[:num]
+            .query("Tier == 1")
+            .drop(columns=["Tier"])
+        )
         unlisted_token_with_top_volume_table = self.formatter.create_bt_from_df(
             unlisted_token_with_top_volume.iloc[:num], name=f"top"
         )
-        send_message(bot_key, unlisted_token_with_top_volume_table, chat_id)
+
+        # new 10
+        new_tokens = (
+            self.tools.get_new_tokens_in_top_volume(date, cat, 200).iloc[:num].query("Tier == 1").drop(columns=["Tier"])
+        )
+        new_tokens_table = self.formatter.create_bt_from_df(new_tokens, name=f"new")
