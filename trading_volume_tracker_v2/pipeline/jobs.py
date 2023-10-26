@@ -102,12 +102,12 @@ class ReportJob:
         </b>
         <a>
         1. Top {num} trading volume tokens unlisted on WOO:\n
-        1.1 ⚠️Tier 1 ⚠️(>= 2 HBO):\n
+        1.1 ⚠️Tier 1 ⚠️:\n
         {tier1_table}\n
-        1.2 Tier 2 (1 HBO,  2 other CEX):\n
+        1.2 Tier 2:\n
         {tier2_table}\n\n
         2. New tokens in top 200 :\n
-        2.1 Tier 1 (>= 2 of HBO):\n
+        2.1 ⚠ Tier 1 ⚠:\n
         {new_tokens_table}\n
         </a>
         """
