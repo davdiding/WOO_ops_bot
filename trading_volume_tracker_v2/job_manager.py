@@ -11,7 +11,7 @@ class JobManager(BaseClient):
         args = self.parser.parse_args()
         if args.volume:
             job = VolumeJob(self.config)
-            job.run(args.num)
+            job.run(args.volume_num)
         elif args.listing:
             job = ListingJob(self.config)
             job.run()
@@ -20,11 +20,7 @@ class JobManager(BaseClient):
             job.run()
         elif args.report:
             job = ReportJob(self.config)
-
-            if args.report_cat:
-                job.run(date=args.date, cat=args.report_cat, num=args.report_num)
-            else:
-                job.run(date=args.date, num=args.report_num)
+            job.run(date=args.date, cat=args.report_cat, num=args.report_num)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,4 @@
 from datetime import datetime as dt
-from typing import Optional
 
 import pandas as pd
 from lib.utils import Formatter, Grabber, Tools, send_message
@@ -75,23 +74,42 @@ class ReportJob:
         self.formatter = Formatter()
         self.name = "ReportJob"
 
-    def run(self, date: str, cat: Optional[str] = "total", num: Optional[int] = 10):
+    def run(self, date: str, cat: str, num: int):
         bot_key = self.config["BOT_KEY"]
         chat_id = self.config["DAVID_CHAT_ID"]
 
         # top 10
-        unlisted_token_with_top_volume = (
-            self.tools.get_unlisted_token_with_top_volume(date, cat)
-            .iloc[:num]
-            .query("Tier == 1")
-            .drop(columns=["Tier"])
-        )
-        unlisted_token_with_top_volume_table = self.formatter.create_bt_from_df(
-            unlisted_token_with_top_volume.iloc[:num], name=f"top"
-        )
+        top_volume_tokens = self.tools.get_unlisted_token_with_top_volume(date, cat)
+        tier1_tokens = top_volume_tokens.query("Tier == 1").iloc[:num].drop(columns=["Tier"])
+        tier2_tokens = top_volume_tokens.query("Tier == 2").iloc[:num].drop(columns=["Tier"])
+        tier1_table = self.formatter.create_bt_from_df(tier1_tokens, name=f"top")
+        tier2_table = self.formatter.create_bt_from_df(tier2_tokens, name=f"top")
 
         # new 10
         new_tokens = (
-            self.tools.get_new_tokens_in_top_volume(date, cat, 200).iloc[:num].query("Tier == 1").drop(columns=["Tier"])
+            self.tools.get_new_tokens_in_top_volume(date, cat, 200).query("Tier == 1").iloc[:num].drop(columns=["Tier"])
         )
         new_tokens_table = self.formatter.create_bt_from_df(new_tokens, name=f"new")
+
+        message = f"""
+        <b>TOP TRADING VOLUME TOKENS REPORT\n\n
+        Date: {
+        self.tools.get_dates_dict(date)['current_week'][0]
+        }~{
+        self.tools.get_dates_dict(date)['current_week'][-1]
+        }\n
+        Category: {cat}\n
+        </b>
+        <a>
+        1. Top {num} trading volume tokens unlisted on WOO:\n
+        1.1 ⚠️Tier 1 ⚠️(>= 2 HBO):\n
+        {tier1_table}\n
+        1.2 Tier 2 (1 HBO,  2 other CEX):\n
+        {tier2_table}\n\n
+        2. New tokens in top 200 :\n
+        2.1 Tier 1 (>= 2 of HBO):\n
+        {new_tokens_table}\n
+        </a>
+        """
+
+        send_message(token=bot_key, message=message, chat_id=chat_id)

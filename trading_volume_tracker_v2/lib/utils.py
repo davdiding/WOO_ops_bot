@@ -33,13 +33,14 @@ class BaseClient:
     def _init_args():
         parser = argparse.ArgumentParser(description="Manage jobs")
         parser.add_argument("--volume", action="store_true", help="Update trading volume")
+        parser.add_argument("--volume_num", type=int, help="", default=1000)
         parser.add_argument("--listing", action="store_true", help="Update listing")
         parser.add_argument("--cleaning", action="store_true", help="Clean db")
         parser.add_argument("--report", action="store_true", help="Send weekly report")
+        parser.add_argument("--report_cat", type=str, help="", default="total")
+        parser.add_argument("--report_num", type=int, help="", default=10)
         parser.add_argument("--date", type=str, help="Date of the report")
-        parser.add_argument("--report_cat", type=str, help="")
-        parser.add_argument("--report_num", type=int, help="", default=20)
-        parser.add_argument("--num", type=int, help="Number of items")
+
         return parser
 
     @staticmethod
@@ -98,7 +99,7 @@ class Formatter:
 
         table.set_style(BeautifulTable.STYLE_BOX)
 
-        data_width = 22 // (len(df.columns) - 1)
+        data_width = 32 // (len(df.columns) - 1)
         table.columns.width = [8] + [data_width] * (len(df.columns) - 1)
 
         table_text = f"<pre>{table}</pre>"
@@ -329,7 +330,7 @@ class Tools(BaseClient, Formatter):
                 return True
 
     @staticmethod
-    def _get_dates(date: str) -> dict:
+    def get_dates_dict(date: str) -> dict:
         input_date = dt.strptime(date, "%Y%m%d")
         weekday = input_date.weekday()
 
@@ -362,7 +363,7 @@ class Tools(BaseClient, Formatter):
             return sorted(self.listing_db.query("exchange == @exchange and type == @cat")["symbol"].unique().tolist())
 
     def get_unlisted_token_with_top_volume(self, date: str, cat: str) -> pd.DataFrame:
-        date_dict = self._get_dates(date)
+        date_dict = self.get_dates_dict(date)
         woo_listing = self._get_exchange_listing("WOO", cat)
         vol = self._get_volume_record(date_dict["current_week"])
 
@@ -384,7 +385,7 @@ class Tools(BaseClient, Formatter):
         if cat == "total":
             columns_map = {
                 "symbol": "Ccy",
-                "total_volume": "Total volume (USD)",
+                "total_volume": "Volume (USD)",
                 "spot_percentage": "Spot perc (%)",
                 "cmc_rank": "Cap rank",
                 "tier": "Tier",
@@ -392,7 +393,7 @@ class Tools(BaseClient, Formatter):
         else:
             columns_map = {
                 "symbol": "Ccy",
-                f"{cat}_volume": f"{cat} volume (USD)",
+                f"{cat}_volume": f"Volume (USD)",
                 f"{cat}_percentage": f"{cat} perc (%)",
                 "cmc_rank": "Cap rank",
                 "tier": "Tier",
@@ -401,7 +402,7 @@ class Tools(BaseClient, Formatter):
         return vol[list(columns_map.keys())].rename(columns=columns_map)
 
     def get_new_tokens_in_top_volume(self, date: str, cat: str, num: int) -> pd.DataFrame:
-        date_dict = self._get_dates(date)
+        date_dict = self.get_dates_dict(date)
         woo_listing = self._get_exchange_listing("WOO", cat)
         vol = self._get_volume_record(date_dict["current_week"])
         last_vol = self._get_volume_record(date_dict["last_week"])
@@ -445,7 +446,7 @@ class Tools(BaseClient, Formatter):
 
         columns_map = {
             "symbol": "Ccy",
-            f"{cat}_volume": f"{cat} volume (USD)",
+            f"{cat}_volume": f"volume (USD)",
             f"{cat}_growth_rate": "Growth rate (%)",
             "cmc_rank": "Cap rank",
             "tier": "Tier",
