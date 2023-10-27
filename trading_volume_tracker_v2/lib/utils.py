@@ -8,6 +8,7 @@ from datetime import timedelta as td
 from decimal import Decimal
 from typing import Optional
 
+import numpy as np
 import pandas as pd
 import pygsheets
 import requests as rq
@@ -32,13 +33,14 @@ class BaseClient:
     def _init_args():
         parser = argparse.ArgumentParser(description="Manage jobs")
         parser.add_argument("--volume", action="store_true", help="Update trading volume")
+        parser.add_argument("--volume_num", type=int, help="", default=1000)
         parser.add_argument("--listing", action="store_true", help="Update listing")
         parser.add_argument("--cleaning", action="store_true", help="Clean db")
         parser.add_argument("--report", action="store_true", help="Send weekly report")
+        parser.add_argument("--report_cat", type=str, help="", default="total")
+        parser.add_argument("--report_num", type=int, help="", default=10)
         parser.add_argument("--date", type=str, help="Date of the report")
-        parser.add_argument("--report_cat", type=str, help="")
-        parser.add_argument("--report_num", type=int, help="", default=20)
-        parser.add_argument("--num", type=int, help="Number of items")
+
         return parser
 
     @staticmethod
@@ -73,7 +75,18 @@ class Formatter:
                     [
                         row[0],
                         self.millify(row[1]),
-                        f"{self.millify(row[2]*100)}%",
+                        f"{int(row[2]*100)}%",
+                        self.millify(row[3], k=1),
+                    ]
+                )
+
+        elif name == "new":
+            for index, row in df.iterrows():
+                table.rows.append(
+                    [
+                        row[0],
+                        self.millify(row[1]),
+                        "-" if row[2] == np.inf else f"{int(row[2]*100)}%",
                         self.millify(row[3], k=1),
                     ]
                 )
@@ -86,7 +99,7 @@ class Formatter:
 
         table.set_style(BeautifulTable.STYLE_BOX)
 
-        data_width = 22 // (len(df.columns) - 1)
+        data_width = 32 // (len(df.columns) - 1)
         table.columns.width = [8] + [data_width] * (len(df.columns) - 1)
 
         table_text = f"<pre>{table}</pre>"
@@ -268,8 +281,12 @@ class Tools(BaseClient, Formatter):
         "https://docs.google.com/spreadsheets/d/1wfz0T-dtWScZ1WyrfSY2rjyV6kQ4CiCh07hywLZjLpQ/edit?usp=sharing"
     )
 
+    TIER1_EXCHANGE = ["binance", "houbi", "okx"]
+    TIER2_EXCHANGE = ["gate-io", "kraken", "coinbase", "crypto.com", "kucoin", "bitfinex", "bybit"]
+
     def __init__(self):
         self.volume_db = self._init_volume_db()
+        self.listing_db = self._init_listing_db()
         self.gcs = self._init_gcs()
         self.db_map = {
             "volume": {
@@ -285,7 +302,7 @@ class Tools(BaseClient, Formatter):
 
     def _init_volume_db(self):
         if os.path.exists(self.VOLUME_DB_PATH):
-            return pd.read_csv(self.VOLUME_DB_PATH).set_index("symbol")
+            return pd.read_csv(self.VOLUME_DB_PATH)
         else:
             return pd.DataFrame()
 
@@ -313,7 +330,7 @@ class Tools(BaseClient, Formatter):
                 return True
 
     @staticmethod
-    def _get_dates(date: str) -> dict:
+    def get_dates_dict(date: str) -> dict:
         input_date = dt.strptime(date, "%Y%m%d")
         weekday = input_date.weekday()
 
@@ -335,19 +352,18 @@ class Tools(BaseClient, Formatter):
             "cmc_rank",
         ]
 
-        volume_db = self._init_volume_db().reset_index()[volume_db_columns].query("date in @dates")
+        volume_db = self.volume_db[volume_db_columns].query("date in @dates")
 
         return volume_db.drop(["date"], axis=1)
 
-    def _get_exchange_listing(self, exchange: str, cat):
-        listing_db = self._init_listing_db()
+    def _get_exchange_listing(self, exchange: str, cat) -> list:
         if cat == "total":
-            return sorted(listing_db.query("exchange == @exchange")["symbol"].unique().tolist())
+            return sorted(self.listing_db.query("exchange == @exchange")["symbol"].unique().tolist())
         else:
-            return sorted(listing_db.query("exchange == @exchange and type == @cat")["symbol"].unique().tolist())
+            return sorted(self.listing_db.query("exchange == @exchange and type == @cat")["symbol"].unique().tolist())
 
     def get_unlisted_token_with_top_volume(self, date: str, cat: str) -> pd.DataFrame:
-        date_dict = self._get_dates(date)
+        date_dict = self.get_dates_dict(date)
         woo_listing = self._get_exchange_listing("WOO", cat)
         vol = self._get_volume_record(date_dict["current_week"])
 
@@ -364,19 +380,100 @@ class Tools(BaseClient, Formatter):
             )
         )
 
+        vol["tier"] = vol["symbol"].apply(lambda x: self._get_token_tiers(symbol=x, cat=cat))
+
         if cat == "total":
             columns_map = {
                 "symbol": "Ccy",
-                "total_volume": "Total volume (USD)",
+                "total_volume": "Volume (USD)",
                 "spot_percentage": "Spot perc (%)",
                 "cmc_rank": "Cap rank",
+                "tier": "Tier",
             }
         else:
             columns_map = {
                 "symbol": "Ccy",
-                f"{cat}_volume": f"{cat} volume (USD)",
+                f"{cat}_volume": f"Volume (USD)",
                 f"{cat}_percentage": f"{cat} perc (%)",
                 "cmc_rank": "Cap rank",
+                "tier": "Tier",
             }
 
         return vol[list(columns_map.keys())].rename(columns=columns_map)
+
+    def get_new_tokens_in_top_volume(self, date: str, cat: str, num: int) -> pd.DataFrame:
+        date_dict = self.get_dates_dict(date)
+        woo_listing = self._get_exchange_listing("WOO", cat)
+        vol = self._get_volume_record(date_dict["current_week"])
+        last_vol = self._get_volume_record(date_dict["last_week"])
+
+        # exclude woo listing and black list and calculate mean value
+        vol = (
+            vol.query("symbol not in @woo_listing and symbol not in @self.BLACK_LIST")
+            .groupby("symbol")
+            .mean()
+            .sort_values(by=f"{cat}_volume", ascending=False)
+            .reset_index()
+            .query(f"{cat}_volume > 0")
+            .eval(
+                f"{'spot' if cat == 'total' else cat}_percentage = "
+                f"({'spot' if cat == 'total' else cat}_volume / total_volume)"
+            )
+            .iloc[:num]
+        )
+        last_vol = (
+            last_vol.query("symbol not in @woo_listing and symbol not in @self.BLACK_LIST")
+            .groupby("symbol")
+            .mean()
+            .sort_values(by=f"{cat}_volume", ascending=False)
+            .reset_index()
+            .query(f"{cat}_volume > 0")
+            .eval(
+                f"{'spot' if cat == 'total' else cat}_percentage = "
+                f"({'spot' if cat == 'total' else cat}_volume / total_volume)"
+            )
+        )
+        last_vol_currency = last_vol["symbol"].tolist()[:num]
+
+        # get new currency in this week
+        new_tokens = vol.query("symbol not in @last_vol_currency")
+        new_tokens[f"last_{cat}_volume"] = (
+            new_tokens["symbol"].apply(lambda x: last_vol.query("symbol == @x")[f"{cat}_volume"].values[0]).fillna(0)
+        )  # fillna to avoid nan
+
+        new_tokens = new_tokens.eval(f"{cat}_growth_rate = {cat}_volume / last_{cat}_volume - 1")
+        new_tokens["tier"] = new_tokens["symbol"].apply(lambda x: self._get_token_tiers(symbol=x, cat=cat))
+
+        columns_map = {
+            "symbol": "Ccy",
+            f"{cat}_volume": f"volume (USD)",
+            f"{cat}_growth_rate": "Growth rate (%)",
+            "cmc_rank": "Cap rank",
+            "tier": "Tier",
+        }
+
+        return new_tokens[list(columns_map.keys())].rename(columns=columns_map)
+
+    def _get_token_tiers(self, symbol: str, cat: str) -> int:
+        """
+        Tier definition:
+        Tier 1: list on 2 of the 3 exchanges (Binance, Huobi, OKX)
+        Tier 2: list on 1 of the 3 exchanges (Binance, Huobi, OKX) and 3 of the other exchanges
+        """
+
+        tier1 = []
+        for i in self.TIER1_EXCHANGE:
+            if symbol in self._get_exchange_listing(i, cat):
+                tier1.append(i)
+
+        tier2 = []
+        for i in self.TIER2_EXCHANGE:
+            if symbol in self._get_exchange_listing(i, cat):
+                tier2.append(i)
+
+        if len(tier1) >= 2:
+            return 1
+        elif len(tier1) == 1 and len(tier2) >= 3:
+            return 2
+        else:
+            return 3
