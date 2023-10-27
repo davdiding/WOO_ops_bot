@@ -80,7 +80,7 @@ class ReportJob:
             date = (dt.today() - td(days=1)).date().strftime("%Y%m%d")
 
         bot_key = self.config["BOT_KEY"]
-        chat_id = self.config["DAVID_CHAT_ID"]
+        chat_id = self.config["REPORT_CHAT_ID"]
 
         # top 10
         top_volume_tokens = self.tools.get_unlisted_token_with_top_volume(date, cat)
