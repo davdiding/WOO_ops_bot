@@ -1,4 +1,5 @@
 from datetime import datetime as dt
+from datetime import timedelta as td
 
 import pandas as pd
 from lib.utils import Formatter, Grabber, Tools, send_message
@@ -75,6 +76,9 @@ class ReportJob:
         self.name = "ReportJob"
 
     def run(self, date: str, cat: str, num: int):
+        if date is None:
+            date = (dt.today() - td(days=1)).date().strftime("%Y%m%d")
+
         bot_key = self.config["BOT_KEY"]
         chat_id = self.config["DAVID_CHAT_ID"]
 
@@ -91,25 +95,18 @@ class ReportJob:
         )
         new_tokens_table = self.formatter.create_bt_from_df(new_tokens, name=f"new")
 
-        message = f"""
-        <b>TOP TRADING VOLUME TOKENS REPORT\n\n
-        Date: {
-        self.tools.get_dates_dict(date)['current_week'][0]
-        }~{
-        self.tools.get_dates_dict(date)['current_week'][-1]
-        }\n
-        Category: {cat}\n
-        </b>
-        <a>
-        1. Top {num} trading volume tokens unlisted on WOO:\n
-        1.1 ⚠️Tier 1 ⚠️:\n
-        {tier1_table}\n
-        1.2 Tier 2:\n
-        {tier2_table}\n\n
-        2. New tokens in top 200 :\n
-        2.1 ⚠ Tier 1 ⚠:\n
-        {new_tokens_table}\n
-        </a>
-        """
+        message = (
+            f"<b>TOP TRADING VOLUME TOKENS REPORT\n\n"
+            f"Date: {self.tools.get_dates_dict(date)['current_week'][0]}~"
+            f"{self.tools.get_dates_dict(date)['current_week'][-1]}\n"
+            f"Category: {cat}\n\n</b>"
+            f"<a>1. Top {num} trading volume tokens unlisted on WOO:\n"
+            f"1.1 ⚠️Tier 1 ⚠️:\n</a>{tier1_table}<a>\n"
+            f"1.2 Tier 2:\n</a>"
+            f"{tier2_table}\n\n"
+            f"<a>2. New tokens in top 200 :\n"
+            f"2.1 ⚠ Tier 1 ⚠:\n</a>"
+            f"{new_tokens_table}"
+        )
 
         send_message(token=bot_key, message=message, chat_id=chat_id)
