@@ -1,9 +1,0 @@
-Info bot started
-2023-11-02 00:39:36,840 - INFO - Info bot started
-2023-11-02 00:39:37,495 - INFO - HTTP Request: POST https://api.telegram.org/bot5699456248:AAFKRHApT6tUV7jDrSXLPqbUJjAgNHc7OOI/getMe "HTTP/1.1 200 OK"
-2023-11-02 00:39:37,709 - INFO - HTTP Request: POST https://api.telegram.org/bot5699456248:AAFKRHApT6tUV7jDrSXLPqbUJjAgNHc7OOI/deleteWebhook "HTTP/1.1 200 OK"
-2023-11-02 00:39:37,714 - INFO - Application started
-2023-11-02 00:39:48,349 - INFO - HTTP Request: POST https://api.telegram.org/bot5699456248:AAFKRHApT6tUV7jDrSXLPqbUJjAgNHc7OOI/getUpdates "HTTP/1.1 200 OK"
-2023-11-02 00:39:53,040 - INFO - HTTP Request: POST https://api.telegram.org/bot5699456248:AAFKRHApT6tUV7jDrSXLPqbUJjAgNHc7OOI/getUpdates "HTTP/1.1 200 OK"
-2023-11-02 00:39:53,043 - INFO - Application is stopping. This might take a moment.
-2023-11-02 00:39:53,044 - INFO - Application.stop() complete
