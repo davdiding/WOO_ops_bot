@@ -276,6 +276,7 @@ class Grabber(BaseClient):
 class Tools(BaseClient, Formatter):
     VOLUME_DB_PATH = os.path.join(BaseClient.CURRENT_PATH, "../db/volume_db.csv")
     LISTING_DB_PATH = os.path.join(BaseClient.CURRENT_PATH, "../db/listing_db.csv")
+    ARCHIVE_DB_PATH = os.path.join(BaseClient.CURRENT_PATH, "../db/archive")
     GCS_KEY_PATH = os.path.join(BaseClient.CURRENT_PATH, "gcs_key.json")
     ONLINE_VOLUME_DB_URL = (
         "https://docs.google.com/spreadsheets/d/1wfz0T-dtWScZ1WyrfSY2rjyV6kQ4CiCh07hywLZjLpQ/edit?usp=sharing"
@@ -298,7 +299,13 @@ class Tools(BaseClient, Formatter):
                 "path": self.LISTING_DB_PATH,
                 "type": "csv",
             },
+            "archive": {
+                "path": self.ARCHIVE_DB_PATH,
+                "type": "folder",
+            },
         }
+
+        self.config = self._init_config()
 
     def _init_volume_db(self):
         if os.path.exists(self.VOLUME_DB_PATH):
@@ -315,10 +322,15 @@ class Tools(BaseClient, Formatter):
     def _init_gcs(self):
         return pygsheets.authorize(service_file=self.GCS_KEY_PATH)
 
-    def to_db(self, name: str, data: pd.DataFrame, index: Optional[bool] = False) -> bool:
+    def to_db(
+        self, name: str, data: pd.DataFrame, index: Optional[bool] = False, file_name: Optional[str] = None
+    ) -> bool:
         if name in self.db_map.keys():
             if self.db_map[name]["type"] == "csv":
                 data.to_csv(self.db_map[name]["path"], index=index)
+                return True
+            elif self.db_map[name]["type"] == "folder":
+                data.to_csv(os.path.join(self.db_map[name]["path"], f"{file_name}.csv"), index=index)
                 return True
 
     def to_online_db(self, name: str, data: pd.DataFrame, index: Optional[bool] = False) -> bool:
@@ -328,6 +340,29 @@ class Tools(BaseClient, Formatter):
                     data = data.reset_index()
                 self.db_map[name]["online"][0].set_dataframe(data, "A1")
                 return True
+
+    def get_logger(self, name: str) -> logging.Logger:
+        log_paths = {
+            "cleaning": os.path.join(BaseClient.CURRENT_PATH, "../log/cleaning/cleaning.log"),
+            "volume": os.path.join(BaseClient.CURRENT_PATH, "../log/volume/volume.log"),
+            "report": os.path.join(BaseClient.CURRENT_PATH, "../log/report/report.log"),
+        }
+        return logging.getLogger(name)
+
+    def clean_volume_db(self, last_date: dt.date) -> None:
+        volume_db = self.volume_db.copy()
+        volume_db["date"] = pd.to_datetime(volume_db["date"])
+        old_volume_db = volume_db.query("date < @last_date")
+        new_volume_db = volume_db.query("date >= @last_date")
+
+        distinct_date = [dt.strftime(i, "%Y-%m-%d") for i in sorted(old_volume_db["date"].unique())]
+        for i in distinct_date:
+            print(i)
+            self.to_db(name="archive", data=old_volume_db.query("date == @i"), file_name=i)
+
+        self.to_db(name="volume", data=new_volume_db, index=False)
+        self.to_online_db(name="volume", data=new_volume_db, index=False)
+        return len(distinct_date)
 
     @staticmethod
     def get_dates_dict(date: str) -> dict:
@@ -477,3 +512,23 @@ class Tools(BaseClient, Formatter):
             return 2
         else:
             return 3
+
+    def fill_missing_symbol(self):
+        volume_db = self.volume_db.copy()
+        symbol_record = volume_db.loc[volume_db["symbol"].notna()].set_index(["slug", "name"])
+        missing_symbol_record = volume_db.loc[volume_db["symbol"].isna()]
+
+        for _, row in missing_symbol_record.iterrows():
+            slug = row["slug"]
+            name = row["name"]
+            if (slug, name) in symbol_record.index:
+                missing_symbol_record.loc[_, "symbol"] = symbol_record.loc[(slug, name), "symbol"]
+            else:
+                missing_symbol_record.loc[_, "symbol"] = np.nan
+
+        symbol_record.reset_index(inplace=True)
+
+        new_volume_db = pd.concat([symbol_record, missing_symbol_record], axis=0)
+        self.to_db(name="volume", data=new_volume_db, index=False)
+        self.to_online_db(name="volume", data=new_volume_db, index=False)
+        return True

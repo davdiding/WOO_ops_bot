@@ -51,10 +51,10 @@ class VolumeJob:
 
         grabber = Grabber()
         tools = Tools()
-        token_info = grabber.get_token_info(num=num)
+        token_info = grabber.get_token_info(num=num).reset_index()
         new_db = pd.concat([tools.volume_db, token_info], axis=0)
-        tools.to_db(name="volume", data=new_db, index=True)
-        tools.to_online_db(name="volume", data=new_db, index=True)
+        tools.to_db(name="volume", data=new_db, index=False)
+        tools.to_online_db(name="volume", data=new_db, index=False)
 
         send_message(token=bot_key, message=f"{dt.today().date()} FINISH VOLUME DB RENEW", chat_id=chat_id)
 
@@ -65,7 +65,15 @@ class CleaningJob:
         self.name = "CleaningJob"
 
     def run(self):
-        pass
+        cleaning_date = (dt.today() - td(days=30)).date()
+        tools = Tools()
+        cleaning_date_num = tools.clean_volume_db(last_date=cleaning_date)
+
+        send_message(
+            token=self.config["BOT_KEY"],
+            message=f"{dt.today().date()} FINISH CLEANING DB RENEW\n{cleaning_date_num} dates move to archive",
+            chat_id=self.config["DAVID_CHAT_ID"],
+        )
 
 
 class ReportJob:
