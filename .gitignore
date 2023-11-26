@@ -6,3 +6,5 @@ __pycache__
 config.json
 gcs_key.json
 .vscode
+archive/
+gc_key.json

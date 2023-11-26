@@ -3,7 +3,14 @@ from datetime import datetime as dt
 import pandas as pd
 from lib.utils import ChatGroup, Permission, Tools
 from telegram import Update
-from telegram.ext import Application, ChatMemberHandler, CommandHandler, ContextTypes
+from telegram.ext import (
+    Application,
+    ChatMemberHandler,
+    CommandHandler,
+    ContextTypes,
+    MessageHandler,
+    filters,
+)
 
 
 class ChatManager:
@@ -32,9 +39,9 @@ class InfoBot(ChatManager):
         operator = update.effective_user
 
         # will do nothing if the operator is not admin
-        if not self.tools.is_admin(operator.id):
+        if not self.tools.is_admin(str(operator.id)):
             self.logger.warning(
-                f"{operator.full_name}({operator.id}) has no permission to do operation to announcement bot."
+                f"{operator.full_name}({operator.id}) has no permission to add/remove announcement bot."
             )
             return
 
@@ -43,7 +50,7 @@ class InfoBot(ChatManager):
 
         status = self.get_chat_status(update)
         if status is None:
-            self.logger.warning(f"Unknown status change: {update} operated by {operator_name}({opreator_id})")
+            self.logger.warning(f"Unknown status change operated by {operator_name}({opreator_id})\n{update}")
 
         chat = update.effective_chat
         id = str(chat.id)
@@ -84,9 +91,46 @@ class InfoBot(ChatManager):
                 )
             else:
                 self.logger.warning(f"{group.name}({group.id}) not in AnnouncementDB.ChatInfo")
+        self.tools.update_chat_info(direction="up")
 
-    # this functions will fill db/chat_info to mongodb AnnouncementDB.ChatInfo
+    async def chat_title_update(self, update: Update, context: ContextTypes) -> None:
+        operator = update.effective_user
+        chat = update.effective_chat
+
+        # if the chat not in our DB, do nothing
+        chat_info = self.tools.init_collection("AnnouncementDB", "ChatInfo")
+        filter_ = {"id": str(chat.id)}
+        if chat_info.count_documents(filter_) == 0:
+            self.logger.warning(
+                f"Can't update {chat.title}({chat.id}) because it's not in AnnouncementDB.ChatInfo. "
+                f"Chat name changed by {operator.full_name}({operator.id})"
+            )
+            return
+        else:
+            for i in chat_info.find(filter_):
+                old_chat = i
+                del old_chat["_id"]
+
+        old_chat = ChatGroup(**old_chat)
+        old_chat_name = old_chat.name
+        old_chat.name = str(chat.title)
+        old_chat.update_time = dt.now().strftime("%Y-%m-%d %H:%M:%S")
+        old_chat.type = str(chat.type)
+
+        chat_info.update_one(filter_, {"$set": old_chat.__dict__})
+
+        self.logger.warning(
+            f"Update {old_chat_name}({old_chat.id}) by {operator.full_name}({operator.id}) to new name: {old_chat.name}"
+        )
+        self.tools.update_chat_info(direction="up")
+
+    # this functions will fill db/chat/chat_info to mongodb AnnouncementDB.ChatInfo
     async def fill_chat_info(self, update: Update, context: ContextTypes) -> None:
+        operator = update.effective_user
+        if not self.tools.is_admin(str(operator.id)):
+            self.logger.warning(f"{operator.full_name}({operator.id}) has no permission to fill chat info.")
+            return
+
         old_chat_info = self.tools.init_chatinfo()
         new_chat_info = self.tools.init_collection("AnnouncementDB", "ChatInfo")
 
@@ -111,6 +155,7 @@ class InfoBot(ChatManager):
 
         self.logger.warning(f"Add {new} new chats to AnnouncementDB.ChatInfo")
 
+    # this functions will fill lib/permission to mongodb AnnouncementDB.Permissions
     async def fill_permission(self, update: Update, context: ContextTypes) -> None:
         if not self.tools.is_admin(str(update.effective_user.id)):
             self.logger.warning(
@@ -141,6 +186,7 @@ class InfoBot(ChatManager):
             Application.builder().token(self.tools.config[self.TEST_BOT_KEY if self.is_test else self.BOT_KEY]).build()
         )
         application.add_handler(ChatMemberHandler(self.chat_status_update, ChatMemberHandler.MY_CHAT_MEMBER))
+        application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_TITLE, self.chat_title_update))
 
         # add fill_chat_info command
         application.add_handler(CommandHandler("fill_chat_info", self.fill_chat_info))
