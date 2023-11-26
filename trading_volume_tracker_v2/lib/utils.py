@@ -11,6 +11,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 import pygsheets
+import pymongo as pm
 import requests as rq
 from beautifultable import BeautifulTable
 
@@ -40,6 +41,7 @@ class BaseClient:
         parser.add_argument("--report_cat", type=str, help="", default="total")
         parser.add_argument("--report_num", type=int, help="", default=10)
         parser.add_argument("--date", type=str, help="Date of the report")
+        parser.add_argument("--fill_mongodb", action="store_true", help="Fill mongodb")
 
         return parser
 
@@ -281,6 +283,7 @@ class Tools(BaseClient, Formatter):
     ONLINE_VOLUME_DB_URL = (
         "https://docs.google.com/spreadsheets/d/1wfz0T-dtWScZ1WyrfSY2rjyV6kQ4CiCh07hywLZjLpQ/edit?usp=sharing"
     )
+    MONGO_URL = "MONGO_URL"
 
     TIER1_EXCHANGE = ["binance", "houbi", "okx"]
     TIER2_EXCHANGE = ["gate-io", "kraken", "coinbase", "crypto.com", "kucoin", "bitfinex", "bybit"]
@@ -306,6 +309,7 @@ class Tools(BaseClient, Formatter):
         }
 
         self.config = self._init_config()
+        self.mongo_client = self.init_mongo_client()
 
     def _init_volume_db(self):
         if os.path.exists(self.VOLUME_DB_PATH):
@@ -532,3 +536,33 @@ class Tools(BaseClient, Formatter):
         self.to_db(name="volume", data=new_volume_db, index=False)
         self.to_online_db(name="volume", data=new_volume_db, index=False)
         return True
+
+    def fill_mongodb(self, fill_type: str):
+        if fill_type == "volume":
+            volume_mongo_db = self.init_collection(db="TradingVolumeDB", name="Volume")
+            volume_csv_db = self.volume_db.copy()
+
+            date_lst = volume_csv_db["date"].unique().tolist()
+            for date in date_lst:
+                filter_ = {"date": date}
+                volume_mongo_db.delete_many(filter_)
+                volume_mongo_db.insert_many(volume_csv_db.query("date == @date").to_dict("records"))
+
+            return len(date_lst)
+        elif fill_type == "listing":
+            listing_mongo_db = self.init_collection(db="TradingVolumeDB", name="ListingInfo")
+            listing_csv_db = self.listing_db.copy()
+
+            exchange_lst = listing_csv_db["exchange"].unique().tolist()
+            for exchange in exchange_lst:
+                filter_ = {"exchange": exchange}
+                listing_mongo_db.delete_many(filter_)
+                listing_mongo_db.insert_many(listing_csv_db.query("exchange == @exchange").to_dict("records"))
+
+            return len(exchange_lst)
+
+    def init_mongo_client(self) -> pm.MongoClient:
+        return pm.MongoClient(self.config[self.MONGO_URL])
+
+    def init_collection(self, db: str, name: str) -> pm.collection.Collection:
+        return self.mongo_client[db][name]

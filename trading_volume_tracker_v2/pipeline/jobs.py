@@ -118,3 +118,25 @@ class ReportJob:
         )
 
         send_message(token=bot_key, message=message, chat_id=chat_id)
+
+
+class FillMongoDBJob:
+    def __init__(self, config):
+        self.config = config
+        self.name = "FillMongoDBJob"
+
+    def run(self):
+        bot_key = self.config["BOT_KEY"]
+        chat_id = self.config["DAVID_CHAT_ID"]
+
+        tools = Tools()
+        volume_length = tools.fill_mongodb(fill_type="volume")
+        exchange_length = tools.fill_mongodb(fill_type="listing")
+
+        send_message(
+            token=bot_key,
+            message=f"{dt.today().date()} FINISH FILLING MONGODB\n"
+            f"Volume DB: {volume_length} dates\n"
+            f"Exchange DB: {exchange_length} exchanges",
+            chat_id=chat_id,
+        )
