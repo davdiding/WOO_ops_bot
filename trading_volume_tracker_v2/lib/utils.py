@@ -125,7 +125,7 @@ class Grabber(BaseClient):
                 token_info = pd.DataFrame(response["data"])[["id", "name", "slug", "symbol", "cmc_rank"]].loc[
                     : kwargs["num"]
                 ]
-                token_info["date"] = dt.today().date()
+                token_info["date"] = dt.today().date().strftime("%Y-%m-%d")
                 return token_info
             elif category == "volume":
                 try:
@@ -227,7 +227,7 @@ class Grabber(BaseClient):
             token_info[f"{cat}_market_num"] = token_info["slug"].apply(
                 lambda x: self._get_market_number(token=x, cat=cat)
             )
-            token_info["updated_time"] = dt.now()
+            token_info["updated_time"] = dt.now().strftime("%Y-%m-%d %H:%M:%S")
         token_info["total_volume"] = token_info["spot_volume"] + token_info["perpetual_volume"]
         token_info["spot_percentage"] = token_info["spot_volume"] / token_info["total_volume"]
         token_info["perpetual_percentage"] = token_info["perpetual_volume"] / token_info["total_volume"]
@@ -476,9 +476,11 @@ class Tools(BaseClient, Formatter):
 
         # get new currency in this week
         new_tokens = vol.query("symbol not in @last_vol_currency")
-        new_tokens[f"last_{cat}_volume"] = (
-            new_tokens["symbol"].apply(lambda x: last_vol.query("symbol == @x")[f"{cat}_volume"].values[0]).fillna(0)
-        )  # fillna to avoid nan
+        new_tokens[f"last_{cat}_volume"] = new_tokens["symbol"].apply(
+            lambda x: last_vol.query("symbol == @x")[f"{cat}_volume"].values[0]
+            if x in last_vol["symbol"].tolist()
+            else 0
+        )
 
         new_tokens = new_tokens.eval(f"{cat}_growth_rate = {cat}_volume / last_{cat}_volume - 1")
         new_tokens["tier"] = new_tokens["symbol"].apply(lambda x: self._get_token_tiers(symbol=x, cat=cat))
@@ -526,7 +528,7 @@ class Tools(BaseClient, Formatter):
             slug = row["slug"]
             name = row["name"]
             if (slug, name) in symbol_record.index:
-                missing_symbol_record.loc[_, "symbol"] = symbol_record.loc[(slug, name), "symbol"]
+                missing_symbol_record.loc[_, "symbol"] = symbol_record.loc[(slug, name), "symbol"].values[0]
             else:
                 missing_symbol_record.loc[_, "symbol"] = np.nan
 

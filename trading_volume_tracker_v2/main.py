@@ -38,7 +38,7 @@ class VolumeBot:
         application = Application.builder().token(self.tools.config[self.BOT_KEY]).build()
 
         application.add_handler(CommandHandler("fill_missing_symbol", self.fill_missing_symbol))
-        application.add_handler(CommandHandler("fill_mongodb", self.tools.start))
+        application.add_handler(CommandHandler("fill_mongodb", self.tools.fill_mongodb))
 
         application.run_polling()
 

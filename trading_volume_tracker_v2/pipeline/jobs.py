@@ -36,6 +36,14 @@ class ListingJob:
         listing_db = pd.concat([listing_db, woo_listing], axis=0)
         tool.to_db(name="listing", data=listing_db, index=False)
 
+        # update to mongo DB
+        listing_mongo_db = tool.init_collection("TradingVolumeDB", "Listing")
+        exchange_lst = listing_db["Exchange"].unique().tolist()
+        for exchange in exchange_lst:
+            filter_ = {"Exchange": exchange}
+            listing_mongo_db.delete_many(filter_)
+            listing_mongo_db.insert_many(listing_db.query("Exchange == @exchange").to_dict("records"))
+
         send_message(token=bot_key, message=f"{dt.today().date()} FINISH LISTING DB RENEW", chat_id=chat_id)
 
 
@@ -54,7 +62,10 @@ class VolumeJob:
         token_info = grabber.get_token_info(num=num).reset_index()
         new_db = pd.concat([tools.volume_db, token_info], axis=0)
         tools.to_db(name="volume", data=new_db, index=False)
-        tools.to_online_db(name="volume", data=new_db, index=False)
+
+        # update to mongo DB
+        volume_mongo_db = tools.init_collection("TradingVolumeDB", "Volume")
+        volume_mongo_db.insert_many(token_info.to_dict("records"))
 
         send_message(token=bot_key, message=f"{dt.today().date()} FINISH VOLUME DB RENEW", chat_id=chat_id)
 
@@ -112,12 +123,12 @@ class ReportJob:
             f"1.1 ⚠️Tier 1 ⚠️:\n</a>{tier1_table}<a>\n"
             f"1.2 Tier 2:\n</a>"
             f"{tier2_table}\n\n"
-            f"<a>2. New tokens in top 200 :\n"
-            f"2.1 ⚠ Tier 1 ⚠:\n</a>"
-            f"{new_tokens_table}"
         )
 
-        send_message(token=bot_key, message=message, chat_id=chat_id)
+        message2 = f"<a>2. New tokens in top 200 :\n" f"2.1 ⚠ Tier 1 ⚠:\n</a>" f"{new_tokens_table}"
+
+        for msg in [message, message2]:
+            send_message(token=bot_key, message=msg, chat_id=chat_id)
 
 
 class FillMongoDBJob:
