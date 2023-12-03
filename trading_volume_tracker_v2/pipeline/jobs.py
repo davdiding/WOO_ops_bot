@@ -94,12 +94,12 @@ class ReportJob:
         self.formatter = Formatter()
         self.name = "ReportJob"
 
-    def run(self, date: str, cat: str, num: int):
+    def run(self, date: str, cat: str, num: int, test: bool = False):
         if date is None:
             date = (dt.today() - td(days=1)).date().strftime("%Y%m%d")
 
         bot_key = self.config["BOT_KEY"]
-        chat_id = self.config["REPORT_CHAT_ID"]
+        chat_id = self.config["REPORT_CHAT_ID"] if not test else self.config["DAVID_CHAT_ID"]
 
         # top 10
         top_volume_tokens = self.tools.get_unlisted_token_with_top_volume(date, cat)

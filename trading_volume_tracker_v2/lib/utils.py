@@ -42,6 +42,7 @@ class BaseClient:
         parser.add_argument("--report_num", type=int, help="", default=10)
         parser.add_argument("--date", type=str, help="Date of the report")
         parser.add_argument("--fill_mongodb", action="store_true", help="Fill mongodb")
+        parser.add_argument("--test", action="store_true", help="Whether this run is for test")
 
         return parser
 
@@ -286,7 +287,7 @@ class Tools(BaseClient, Formatter):
     MONGO_URL = "MONGO_URL"
 
     TIER1_EXCHANGE = ["binance", "houbi", "okx"]
-    TIER2_EXCHANGE = ["gate-io", "kraken", "coinbase", "crypto.com", "kucoin", "bitfinex", "bybit"]
+    TIER2_EXCHANGE = ["gate.io", "kraken", "coinbase", "crypto.com", "kucoin", "bitfinex", "bybit"]
 
     def __init__(self):
         self.volume_db = self._init_volume_db()
@@ -392,16 +393,16 @@ class Tools(BaseClient, Formatter):
 
         collections = self.init_collection(db="TradingVolumeDB", name="Volume")
 
-        filter = {"date": {"$in": dates}}
-        volume_db = pd.DataFrame(collections.find(filter))[columns]
+        filter_ = {"date": {"$in": dates}}
+        volume_db = pd.DataFrame(collections.find(filter_))[columns]
 
         return volume_db
 
-    def _get_exchange_listing(self, exchange: str, cat) -> list:
-        if cat == "total":
-            return sorted(self.listing_db.query("exchange == @exchange")["symbol"].unique().tolist())
-        else:
-            return sorted(self.listing_db.query("exchange == @exchange and type == @cat")["symbol"].unique().tolist())
+    def _get_exchange_listing(self, exchange: str, cat: Optional[str] = None) -> list:
+
+        collections = self.init_collection(db="TradingVolumeDB", name="ListingInfo")
+        filter_ = {"exchange": exchange} if cat == "total" else {"exchange": exchange, "type": cat}
+        return pd.DataFrame(collections.find(filter_))["symbol"].unique().tolist()
 
     def get_unlisted_token_with_top_volume(self, date: str, cat: str) -> pd.DataFrame:
         date_dict = self.get_dates_dict(date)

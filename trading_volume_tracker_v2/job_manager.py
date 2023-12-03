@@ -20,7 +20,7 @@ class JobManager(BaseClient):
             job.run()
         elif args.report:
             job = ReportJob(self.config)
-            job.run(date=args.date, cat=args.report_cat, num=args.report_num)
+            job.run(date=args.date, cat=args.report_cat, num=args.report_num, test=args.test)
         elif args.fill_mongodb:
             job = FillMongoDBJob(self.config)
             job.run()
