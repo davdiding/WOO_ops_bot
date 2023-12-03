@@ -382,8 +382,7 @@ class Tools(BaseClient, Formatter):
         return {"current_week": current_week, "last_week": last_week}
 
     def _get_volume_record(self, dates: list) -> pd.DataFrame:
-        volume_db_columns = [
-            "date",
+        columns = [
             "symbol",
             "total_volume",
             "spot_volume",
@@ -391,9 +390,12 @@ class Tools(BaseClient, Formatter):
             "cmc_rank",
         ]
 
-        volume_db = self.volume_db[volume_db_columns].query("date in @dates")
+        collections = self.init_collection(db="TradingVolumeDB", name="Volume")
 
-        return volume_db.drop(["date"], axis=1)
+        filter = {"date": {"$in": dates}}
+        volume_db = pd.DataFrame(collections.find(filter))[columns]
+
+        return volume_db
 
     def _get_exchange_listing(self, exchange: str, cat) -> list:
         if cat == "total":
