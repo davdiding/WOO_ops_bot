@@ -3,6 +3,7 @@ import logging
 import os
 from datetime import datetime, timezone
 
+import numpy as np
 import pandas as pd
 import pygsheets as pg
 import pymongo as pm
@@ -26,6 +27,26 @@ class Tools:
     ONLINE_CHAT_INFO_URL = (
         "https://docs.google.com/spreadsheets/d/15yR0QEKG6axFxnxvOGYTwztE33yUsVo5xktloTthedE/edit?usp=sharing"
     )
+    ONLIN_CHAT_INFO_TABLE_NAME = "Chat Infomation (formal)"
+    CHAT_INFO_COLUMNS_MAP = {
+        "id": "id",
+        "type": "Type",
+        "name": "Name",
+        "label": "Category",
+        "description": "Note",
+        "add_time": "Added Time",
+        "update_time": "Updated Time",
+        "test_channel": "Test Channel",
+        "maintenance": "Maintenance",
+        "listing": "Listing",
+        "delisting": "Delisting",
+        "trading_suspension_resumption": "Trading Suspension / Resumption",
+        "funding_rate": "Funding Rate",
+        "dmm_program": "DMM Program",
+        "vip_program": "VIP Program",
+        "new_trading_competition": "New Trading Competition",
+    }
+    ANNOUNCEMENT_INFO_COLUMNS_MAP = {}
 
     CURRENT_PATH = os.path.abspath(os.path.dirname(__file__))
     CONFIG_PATH = os.path.join(CURRENT_PATH, "config.json")
@@ -53,9 +74,6 @@ class Tools:
         return pg.authorize(service_file=self.GC_KEY_PATH)
 
     def init_collection(self, db_name: str, collection_name: str) -> pm.collection.Collection:
-        if collection_name == "ChatInfo":
-            result = self.update_chat_info(direction="down")
-            print(result)
         return self.mongo_client[db_name][collection_name]
 
     def in_whitelist(self, id: str) -> bool:
@@ -79,26 +97,52 @@ class Tools:
     def init_chatinfo(self) -> pd.DataFrame:
         return pd.read_csv(self.OLD_CHAT_INFO_PATH, index_col=None)
 
-    def init_online_chatinfo(self) -> pd.DataFrame:
-        return self.gc_client.open_by_url(self.ONLINE_CHAT_INFO_URL)[0].get_as_df()
+    def init_online_sheet(self, url: str, name: str) -> pd.DataFrame:
+        ws = self.gc_client.open_by_url(url)
+        sheet_names = [i.title for i in ws.worksheets()]
+
+        if name not in sheet_names:
+            return pd.DataFrame()
+        else:
+            return ws.worksheet_by_title(name).get_as_df()
 
     def get_logger(self, name: str):
         log_path_map = {"InfoBot": self.INFO_BOT_LOG_PATH, "MainBot": self.MAIN_BOT_LOG_PATH}
-
-        if not os.path.exists(log_path_map[name]):
-            open(log_path_map[name], "w").close()
-
         logger = logging.getLogger(name)
-        if not logger.handlers:
-            logger.setLevel(logging.WARNING)
 
-            formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+        formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
-            file_handler = logging.FileHandler(log_path_map[name], "a", "utf-8")
-            file_handler.setFormatter(formatter)
-            logger.addHandler(file_handler)
+        file_handler = logging.FileHandler(log_path_map[name])
+        file_handler.setFormatter(formatter)
+
+        logger.addHandler(file_handler)
+        logger.setLevel(logging.INFO)
         logger.propagate = False
+
         return logger
+
+    def get_columns_name(self, col: str, input: str) -> str:
+        """
+        param col: input column name
+        param input: 'cl'/'cr'/'al'/'ar',
+            'c' means chat,
+            'a' means announcement,
+            'l' means input is local name,
+            'r' means input is remote name (online sheet)
+        """
+
+        if input == "cl":
+            return self.CHAT_INFO_COLUMNS_MAP[col]
+        elif input == "cr":
+            for k, v in self.CHAT_INFO_COLUMNS_MAP.items():
+                if v == col:
+                    return k
+        elif input == "al":
+            return self.ANNOUNCEMENT_INFO_COLUMNS_MAP[col]
+        elif input == "ar":
+            for k, v in self.ANNOUNCEMENT_INFO_COLUMNS_MAP.items():
+                if v == col:
+                    return k
 
     def update_chat_info(self, direction: str) -> None:
         online_chat_info = self.init_online_chatinfo()
@@ -228,7 +272,7 @@ class TGTestCases:
             from_user=from_user,
             date=datetime(2023, 11, 23, 16, 38, 43, tzinfo=timezone.utc),
             chat=chat,
-            text="/fill_permission",
+            text=f"/{command}",
             entities=[message_entity],
             group_chat_created=False,
             supergroup_chat_created=False,
@@ -271,7 +315,7 @@ class TGTestCases:
 class ChatGroup:
     def __init__(
         self,
-        id: str,
+        id: any,
         type: str,
         name: str,
         label: list,
@@ -280,16 +324,22 @@ class ChatGroup:
         update_time: str = None,
         operator: str = None,
         operator_id: str = None,
+        **kwargs,
     ):
-        self.id = id
+        self.id = str(id)
         self.type = type
         self.name = name
-        self.label = label
-        self.description = description
+        self.label = label.split(",") if isinstance(label, str) else label
+        self.description = description if not np.isnan(description) else ""
         self.add_time = add_time
         self.update_time = update_time
         self.operator = operator
         self.operator_id = operator_id
+        self.handle_kwargs(kwargs)
+
+    def handle_kwargs(self, kwargs: dict):
+        for k, v in kwargs.items():
+            setattr(self, k, v)
 
     def add_label(self, label: str):
         if label not in self.label:
@@ -309,3 +359,7 @@ class Permission:
         self.admin = admin
         self.whitelist = whitelist
         self.update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+class Announcement:
+    pass

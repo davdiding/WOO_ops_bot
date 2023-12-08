@@ -29,6 +29,15 @@ class InfoBot(ChatManager):
     BOT_KEY = "INFO_BOT_KEY"
     TEST_BOT_KEY = "TEST_INFO_BOT_KEY"
 
+    OLD_TO_NEW_CHAT_INFO_COLUMNS_MAP = {
+        "chat_id": "id",
+        "chat_type": "type",
+        "chat_name": "name",
+        "chat_cat": "label",
+        "chat_added_time": "add_time",
+        "note": "description",
+    }
+
     def __init__(self, test: bool = True):
         super().__init__()
         self.is_test = test
@@ -179,6 +188,37 @@ class InfoBot(ChatManager):
                 self.logger.warning(f"Add {permission.name}({permission.id}) to AnnouncementDB.Permissions")
             elif new_permission.count_documents(filter_) == 1:
                 self.logger.warning(f"{permission.name}({permission.id}) already in AnnouncementDB.Permissions")
+
+    # This function will move chat_info.csv to mongodb
+    def update_chat_info(self, update: Update, context: ContextTypes) -> None:
+        operator = update.effective_user
+        if not self.tools.is_admin(str(operator.id)):
+            self.logger.warning(f"{operator.full_name}({operator.id}) has no permission to update chat info.")
+            return
+        online_db = self.tools.init_online_sheet(self.tools.ONLINE_CHAT_INFO_URL, self.tools.ONLIN_CHAT_INFO_TABLE_NAME)
+        online_db_columns = online_db.columns.tolist()
+        new_chat_info = self.tools.init_collection("AnnouncementDB", "ChatInfo")
+        old_chat_info = self.tools.init_chatinfo()
+
+        # need to extract all the columns between "Categopry" and "Note", not include them
+        start = online_db_columns.index("Category")
+        end = online_db_columns.index("Note")
+        category_list = online_db_columns[start + 1 : end]
+
+        # empty mongo db
+        new_chat_info.delete_many({})
+
+        # add old chat info to mongo db
+        for _, row in old_chat_info.iterrows():
+            inputs = {self.OLD_TO_NEW_CHAT_INFO_COLUMNS_MAP[key]: value for key, value in row.items()}
+            for category in category_list:
+                _category = self.tools.get_columns_name(category, input="cr")
+                if _category is None:
+                    continue
+                inputs[_category] = True
+            chat = ChatGroup(**inputs)
+            new_chat_info.insert_one(chat.__dict__)
+        self.logger.info(f"Add {new_chat_info.count_documents({})} chats to AnnouncementDB.ChatInfo")
 
     def run(self):
         self.logger.warning("InfoBot is running...")

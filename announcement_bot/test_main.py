@@ -20,8 +20,8 @@ class TestInfoBot(unittest.TestCase):
     def test_change_chat_title(self):
         self.info_bot.chat_title_update(self.test_cases.chat_rename(), None)
 
-    def test_fill_chat_info(self):
-        self.info_bot.fill_chat_info()
+    def test_update_chat_info(self):
+        self.info_bot.update_chat_info(self.test_cases.bot_command(command="update_chat_info"), None)
 
     def test_fill_permission(self):
         self.info_bot.fill_permission(self.test_cases.bot_command(command="fill_permission"), None)
