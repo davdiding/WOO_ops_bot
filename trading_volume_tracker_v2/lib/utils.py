@@ -8,12 +8,13 @@ from datetime import timedelta as td
 from decimal import Decimal
 from typing import Optional
 
+import matplotlib.ticker as ticker
 import numpy as np
 import pandas as pd
-import pygsheets
 import pymongo as pm
 import requests as rq
 from beautifultable import BeautifulTable
+from matplotlib import pyplot as plt
 
 
 def send_message(token, message, chat_id):
@@ -290,61 +291,14 @@ class Tools(BaseClient, Formatter):
     TIER2_EXCHANGE = ["gate.io", "kraken", "coinbase", "crypto.com", "kucoin", "bitfinex", "bybit"]
 
     def __init__(self):
-        self.volume_db = self._init_volume_db()
-        self.listing_db = self._init_listing_db()
-        self.gcs = self._init_gcs()
-        self.db_map = {
-            "volume": {
-                "path": self.VOLUME_DB_PATH,
-                "type": "csv",
-                "online": self.gcs.open_by_url(self.ONLINE_VOLUME_DB_URL),
-            },
-            "listing": {
-                "path": self.LISTING_DB_PATH,
-                "type": "csv",
-            },
-            "archive": {
-                "path": self.ARCHIVE_DB_PATH,
-                "type": "folder",
-            },
-        }
-
         self.config = self._init_config()
         self.mongo_client = self.init_mongo_client()
 
-    def _init_volume_db(self):
-        if os.path.exists(self.VOLUME_DB_PATH):
-            return pd.read_csv(self.VOLUME_DB_PATH)
-        else:
-            return pd.DataFrame()
+    def init_mongo_client(self) -> pm.MongoClient:
+        return pm.MongoClient(self.config[self.MONGO_URL])
 
-    def _init_listing_db(self):
-        if os.path.exists(self.LISTING_DB_PATH):
-            return pd.read_csv(self.LISTING_DB_PATH)
-        else:
-            return pd.DataFrame()
-
-    def _init_gcs(self):
-        return pygsheets.authorize(service_file=self.GCS_KEY_PATH)
-
-    def to_db(
-        self, name: str, data: pd.DataFrame, index: Optional[bool] = False, file_name: Optional[str] = None
-    ) -> bool:
-        if name in self.db_map.keys():
-            if self.db_map[name]["type"] == "csv":
-                data.to_csv(self.db_map[name]["path"], index=index)
-                return True
-            elif self.db_map[name]["type"] == "folder":
-                data.to_csv(os.path.join(self.db_map[name]["path"], f"{file_name}.csv"), index=index)
-                return True
-
-    def to_online_db(self, name: str, data: pd.DataFrame, index: Optional[bool] = False) -> bool:
-        if name in self.db_map.keys():
-            if self.db_map[name]["type"] == "csv":
-                if index:
-                    data = data.reset_index()
-                self.db_map[name]["online"][0].set_dataframe(data, "A1")
-                return True
+    def init_collection(self, db: str, name: str) -> pm.collection.Collection:
+        return self.mongo_client[db][name]
 
     def get_logger(self, name: str) -> logging.Logger:
         log_paths = {
@@ -353,21 +307,6 @@ class Tools(BaseClient, Formatter):
             "report": os.path.join(BaseClient.CURRENT_PATH, "../log/report/report.log"),
         }
         return logging.getLogger(name)
-
-    def clean_volume_db(self, last_date: dt.date) -> None:
-        volume_db = self.volume_db.copy()
-        volume_db["date"] = pd.to_datetime(volume_db["date"])
-        old_volume_db = volume_db.query("date < @last_date")
-        new_volume_db = volume_db.query("date >= @last_date")
-
-        distinct_date = [dt.strftime(i, "%Y-%m-%d") for i in sorted(old_volume_db["date"].unique())]
-        for i in distinct_date:
-            print(i)
-            self.to_db(name="archive", data=old_volume_db.query("date == @i"), file_name=i)
-
-        self.to_db(name="volume", data=new_volume_db, index=False)
-        self.to_online_db(name="volume", data=new_volume_db, index=False)
-        return len(distinct_date)
 
     @staticmethod
     def get_dates_dict(date: str) -> dict:
@@ -566,8 +505,49 @@ class Tools(BaseClient, Formatter):
 
             return len(exchange_lst)
 
-    def init_mongo_client(self) -> pm.MongoClient:
-        return pm.MongoClient(self.config[self.MONGO_URL])
+    def get_historical_volume(self, currency: str, start: str, end: str) -> pd.DataFrame:
 
-    def init_collection(self, db: str, name: str) -> pm.collection.Collection:
-        return self.mongo_client[db][name]
+        columns = ["date", "symbol", "total_volume", "spot_volume", "perpetual_volume"]
+        dates = pd.date_range(start=start, end=end).strftime("%Y-%m-%d").tolist()
+
+        collection = self.init_collection(db="TradingVolumeDB", name="Volume")
+        filter_ = {"symbol": currency, "date": {"$in": dates}}
+        return pd.DataFrame(collection.find(filter_)).sort_values(by="date")[columns]
+
+
+class ImageCreator(BaseClient, Formatter):
+    def __init__(self):
+        self.img_folder = self.CURRENT_PATH + "/../db/img/"
+
+    # This function will create a volume plot for a specific currency with
+    # total volume, spot volume and perpetual volume in time series.
+    def volume_plot(self, currency: str, volume: pd.DataFrame):
+        plt.style.use("seaborn")
+
+        fig, ax = plt.subplots(figsize=(12, 8))
+
+        ax.plot(volume["date"], volume["total_volume"], label="Total Volume", color="blue", linewidth=2, linestyle="-")
+        ax.plot(volume["date"], volume["spot_volume"], label="Spot Volume", color="green", linewidth=2, linestyle="--")
+        ax.plot(
+            volume["date"],
+            volume["perpetual_volume"],
+            label="Perpetual Volume",
+            color="red",
+            linewidth=2,
+            linestyle="-.",
+        )
+
+        ax.set_title(f'{volume["symbol"].values[0]} Volume', fontsize=14, fontweight="bold")
+        ax.set_xlabel("Date", fontsize=12)
+        ax.set_ylabel("Volume (USD)", fontsize=12)
+        ax.legend(fontsize=10, frameon=True)
+
+        ax.get_yaxis().set_major_formatter(ticker.FuncFormatter(lambda x, p: self.millify(x)))
+
+        ax.grid(True)
+        ax.set_facecolor("whitesmoke")
+
+        fig_path = self.img_folder + f"{currency}_volume.png"
+        fig.savefig(fig_path, dpi=300)
+
+        return fig_path
