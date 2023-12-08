@@ -1,5 +1,5 @@
 from lib.utils import BaseClient
-from pipeline.jobs import CleaningJob, ListingJob, ReportJob, VolumeJob
+from pipeline.jobs import FillMongoDBJob, ListingJob, ReportJob, VolumeJob
 
 
 class JobManager(BaseClient):
@@ -15,12 +15,12 @@ class JobManager(BaseClient):
         elif args.listing:
             job = ListingJob(self.config)
             job.run()
-        elif args.cleaning:
-            job = CleaningJob(self.config)
-            job.run()
         elif args.report:
             job = ReportJob(self.config)
-            job.run(date=args.date, cat=args.report_cat, num=args.report_num)
+            job.run(date=args.date, cat=args.report_cat, num=args.report_num, test=args.test)
+        elif args.fill_mongodb:
+            job = FillMongoDBJob(self.config)
+            job.run()
 
 
 if __name__ == "__main__":

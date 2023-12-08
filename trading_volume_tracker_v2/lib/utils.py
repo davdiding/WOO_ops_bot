@@ -8,11 +8,13 @@ from datetime import timedelta as td
 from decimal import Decimal
 from typing import Optional
 
+import matplotlib.ticker as ticker
 import numpy as np
 import pandas as pd
-import pygsheets
+import pymongo as pm
 import requests as rq
 from beautifultable import BeautifulTable
+from matplotlib import pyplot as plt
 
 
 def send_message(token, message, chat_id):
@@ -40,6 +42,8 @@ class BaseClient:
         parser.add_argument("--report_cat", type=str, help="", default="total")
         parser.add_argument("--report_num", type=int, help="", default=10)
         parser.add_argument("--date", type=str, help="Date of the report")
+        parser.add_argument("--fill_mongodb", action="store_true", help="Fill mongodb")
+        parser.add_argument("--test", action="store_true", help="Whether this run is for test")
 
         return parser
 
@@ -123,7 +127,7 @@ class Grabber(BaseClient):
                 token_info = pd.DataFrame(response["data"])[["id", "name", "slug", "symbol", "cmc_rank"]].loc[
                     : kwargs["num"]
                 ]
-                token_info["date"] = dt.today().date()
+                token_info["date"] = dt.today().date().strftime("%Y-%m-%d")
                 return token_info
             elif category == "volume":
                 try:
@@ -225,7 +229,7 @@ class Grabber(BaseClient):
             token_info[f"{cat}_market_num"] = token_info["slug"].apply(
                 lambda x: self._get_market_number(token=x, cat=cat)
             )
-            token_info["updated_time"] = dt.now()
+            token_info["updated_time"] = dt.now().strftime("%Y-%m-%d %H:%M:%S")
         token_info["total_volume"] = token_info["spot_volume"] + token_info["perpetual_volume"]
         token_info["spot_percentage"] = token_info["spot_volume"] / token_info["total_volume"]
         token_info["perpetual_percentage"] = token_info["perpetual_volume"] / token_info["total_volume"]
@@ -276,58 +280,33 @@ class Grabber(BaseClient):
 class Tools(BaseClient, Formatter):
     VOLUME_DB_PATH = os.path.join(BaseClient.CURRENT_PATH, "../db/volume_db.csv")
     LISTING_DB_PATH = os.path.join(BaseClient.CURRENT_PATH, "../db/listing_db.csv")
+    ARCHIVE_DB_PATH = os.path.join(BaseClient.CURRENT_PATH, "../db/archive")
     GCS_KEY_PATH = os.path.join(BaseClient.CURRENT_PATH, "gcs_key.json")
     ONLINE_VOLUME_DB_URL = (
         "https://docs.google.com/spreadsheets/d/1wfz0T-dtWScZ1WyrfSY2rjyV6kQ4CiCh07hywLZjLpQ/edit?usp=sharing"
     )
+    MONGO_URL = "MONGO_URL"
 
     TIER1_EXCHANGE = ["binance", "houbi", "okx"]
-    TIER2_EXCHANGE = ["gate-io", "kraken", "coinbase", "crypto.com", "kucoin", "bitfinex", "bybit"]
+    TIER2_EXCHANGE = ["gate.io", "kraken", "coinbase", "crypto.com", "kucoin", "bitfinex", "bybit"]
 
     def __init__(self):
-        self.volume_db = self._init_volume_db()
-        self.listing_db = self._init_listing_db()
-        self.gcs = self._init_gcs()
-        self.db_map = {
-            "volume": {
-                "path": self.VOLUME_DB_PATH,
-                "type": "csv",
-                "online": self.gcs.open_by_url(self.ONLINE_VOLUME_DB_URL),
-            },
-            "listing": {
-                "path": self.LISTING_DB_PATH,
-                "type": "csv",
-            },
+        self.config = self._init_config()
+        self.mongo_client = self.init_mongo_client()
+
+    def init_mongo_client(self) -> pm.MongoClient:
+        return pm.MongoClient(self.config[self.MONGO_URL])
+
+    def init_collection(self, db: str, name: str) -> pm.collection.Collection:
+        return self.mongo_client[db][name]
+
+    def get_logger(self, name: str) -> logging.Logger:
+        log_paths = {
+            "cleaning": os.path.join(BaseClient.CURRENT_PATH, "../log/cleaning/cleaning.log"),
+            "volume": os.path.join(BaseClient.CURRENT_PATH, "../log/volume/volume.log"),
+            "report": os.path.join(BaseClient.CURRENT_PATH, "../log/report/report.log"),
         }
-
-    def _init_volume_db(self):
-        if os.path.exists(self.VOLUME_DB_PATH):
-            return pd.read_csv(self.VOLUME_DB_PATH)
-        else:
-            return pd.DataFrame()
-
-    def _init_listing_db(self):
-        if os.path.exists(self.LISTING_DB_PATH):
-            return pd.read_csv(self.LISTING_DB_PATH)
-        else:
-            return pd.DataFrame()
-
-    def _init_gcs(self):
-        return pygsheets.authorize(service_file=self.GCS_KEY_PATH)
-
-    def to_db(self, name: str, data: pd.DataFrame, index: Optional[bool] = False) -> bool:
-        if name in self.db_map.keys():
-            if self.db_map[name]["type"] == "csv":
-                data.to_csv(self.db_map[name]["path"], index=index)
-                return True
-
-    def to_online_db(self, name: str, data: pd.DataFrame, index: Optional[bool] = False) -> bool:
-        if name in self.db_map.keys():
-            if self.db_map[name]["type"] == "csv":
-                if index:
-                    data = data.reset_index()
-                self.db_map[name]["online"][0].set_dataframe(data, "A1")
-                return True
+        return logging.getLogger(name)
 
     @staticmethod
     def get_dates_dict(date: str) -> dict:
@@ -343,8 +322,7 @@ class Tools(BaseClient, Formatter):
         return {"current_week": current_week, "last_week": last_week}
 
     def _get_volume_record(self, dates: list) -> pd.DataFrame:
-        volume_db_columns = [
-            "date",
+        columns = [
             "symbol",
             "total_volume",
             "spot_volume",
@@ -352,15 +330,18 @@ class Tools(BaseClient, Formatter):
             "cmc_rank",
         ]
 
-        volume_db = self.volume_db[volume_db_columns].query("date in @dates")
+        collections = self.init_collection(db="TradingVolumeDB", name="Volume")
 
-        return volume_db.drop(["date"], axis=1)
+        filter_ = {"date": {"$in": dates}}
+        volume_db = pd.DataFrame(collections.find(filter_))[columns]
 
-    def _get_exchange_listing(self, exchange: str, cat) -> list:
-        if cat == "total":
-            return sorted(self.listing_db.query("exchange == @exchange")["symbol"].unique().tolist())
-        else:
-            return sorted(self.listing_db.query("exchange == @exchange and type == @cat")["symbol"].unique().tolist())
+        return volume_db
+
+    def _get_exchange_listing(self, exchange: str, cat: Optional[str] = None) -> list:
+
+        collections = self.init_collection(db="TradingVolumeDB", name="ListingInfo")
+        filter_ = {"exchange": exchange} if cat == "total" else {"exchange": exchange, "type": cat}
+        return pd.DataFrame(collections.find(filter_))["symbol"].unique().tolist()
 
     def get_unlisted_token_with_top_volume(self, date: str, cat: str) -> pd.DataFrame:
         date_dict = self.get_dates_dict(date)
@@ -437,9 +418,11 @@ class Tools(BaseClient, Formatter):
 
         # get new currency in this week
         new_tokens = vol.query("symbol not in @last_vol_currency")
-        new_tokens[f"last_{cat}_volume"] = (
-            new_tokens["symbol"].apply(lambda x: last_vol.query("symbol == @x")[f"{cat}_volume"].values[0]).fillna(0)
-        )  # fillna to avoid nan
+        new_tokens[f"last_{cat}_volume"] = new_tokens["symbol"].apply(
+            lambda x: last_vol.query("symbol == @x")[f"{cat}_volume"].values[0]
+            if x in last_vol["symbol"].tolist()
+            else 0
+        )
 
         new_tokens = new_tokens.eval(f"{cat}_growth_rate = {cat}_volume / last_{cat}_volume - 1")
         new_tokens["tier"] = new_tokens["symbol"].apply(lambda x: self._get_token_tiers(symbol=x, cat=cat))
@@ -477,3 +460,94 @@ class Tools(BaseClient, Formatter):
             return 2
         else:
             return 3
+
+    def fill_missing_symbol(self):
+        volume_db = self.volume_db.copy()
+        symbol_record = volume_db.loc[volume_db["symbol"].notna()].set_index(["slug", "name"])
+        missing_symbol_record = volume_db.loc[volume_db["symbol"].isna()]
+
+        for _, row in missing_symbol_record.iterrows():
+            slug = row["slug"]
+            name = row["name"]
+            if (slug, name) in symbol_record.index:
+                missing_symbol_record.loc[_, "symbol"] = symbol_record.loc[(slug, name), "symbol"].values[0]
+            else:
+                missing_symbol_record.loc[_, "symbol"] = np.nan
+
+        symbol_record.reset_index(inplace=True)
+
+        new_volume_db = pd.concat([symbol_record, missing_symbol_record], axis=0)
+        self.to_db(name="volume", data=new_volume_db, index=False)
+        self.to_online_db(name="volume", data=new_volume_db, index=False)
+        return True
+
+    def fill_mongodb(self, fill_type: str):
+        if fill_type == "volume":
+            volume_mongo_db = self.init_collection(db="TradingVolumeDB", name="Volume")
+            volume_csv_db = self.volume_db.copy()
+
+            date_lst = volume_csv_db["date"].unique().tolist()
+            for date in date_lst:
+                filter_ = {"date": date}
+                volume_mongo_db.delete_many(filter_)
+                volume_mongo_db.insert_many(volume_csv_db.query("date == @date").to_dict("records"))
+
+            return len(date_lst)
+        elif fill_type == "listing":
+            listing_mongo_db = self.init_collection(db="TradingVolumeDB", name="ListingInfo")
+            listing_csv_db = self.listing_db.copy()
+
+            exchange_lst = listing_csv_db["exchange"].unique().tolist()
+            for exchange in exchange_lst:
+                filter_ = {"exchange": exchange}
+                listing_mongo_db.delete_many(filter_)
+                listing_mongo_db.insert_many(listing_csv_db.query("exchange == @exchange").to_dict("records"))
+
+            return len(exchange_lst)
+
+    def get_historical_volume(self, currency: str, start: str, end: str) -> pd.DataFrame:
+
+        columns = ["date", "symbol", "total_volume", "spot_volume", "perpetual_volume"]
+        dates = pd.date_range(start=start, end=end).strftime("%Y-%m-%d").tolist()
+
+        collection = self.init_collection(db="TradingVolumeDB", name="Volume")
+        filter_ = {"symbol": currency, "date": {"$in": dates}}
+        return pd.DataFrame(collection.find(filter_)).sort_values(by="date")[columns]
+
+
+class ImageCreator(BaseClient, Formatter):
+    def __init__(self):
+        self.img_folder = self.CURRENT_PATH + "/../db/img/"
+
+    # This function will create a volume plot for a specific currency with
+    # total volume, spot volume and perpetual volume in time series.
+    def volume_plot(self, currency: str, volume: pd.DataFrame):
+        plt.style.use("seaborn")
+
+        fig, ax = plt.subplots(figsize=(12, 8))
+
+        ax.plot(volume["date"], volume["total_volume"], label="Total Volume", color="blue", linewidth=2, linestyle="-")
+        ax.plot(volume["date"], volume["spot_volume"], label="Spot Volume", color="green", linewidth=2, linestyle="--")
+        ax.plot(
+            volume["date"],
+            volume["perpetual_volume"],
+            label="Perpetual Volume",
+            color="red",
+            linewidth=2,
+            linestyle="-.",
+        )
+
+        ax.set_title(f'{volume["symbol"].values[0]} Volume', fontsize=14, fontweight="bold")
+        ax.set_xlabel("Date", fontsize=12)
+        ax.set_ylabel("Volume (USD)", fontsize=12)
+        ax.legend(fontsize=10, frameon=True)
+
+        ax.get_yaxis().set_major_formatter(ticker.FuncFormatter(lambda x, p: self.millify(x)))
+
+        ax.grid(True)
+        ax.set_facecolor("whitesmoke")
+
+        fig_path = self.img_folder + f"{currency}_volume.png"
+        fig.savefig(fig_path, dpi=300)
+
+        return fig_path

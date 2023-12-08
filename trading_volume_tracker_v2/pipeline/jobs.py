@@ -34,7 +34,14 @@ class ListingJob:
         listing_db = grabber.get_listing_info(exchange_info=exchange_info)
         woo_listing = grabber.get_woo_listing()
         listing_db = pd.concat([listing_db, woo_listing], axis=0)
-        tool.to_db(name="listing", data=listing_db, index=False)
+
+        # update to mongo DB
+        listing_mongo_db = tool.init_collection("TradingVolumeDB", "Listing")
+        exchange_lst = listing_db["Exchange"].unique().tolist()
+        for exchange in exchange_lst:
+            filter_ = {"Exchange": exchange}
+            listing_mongo_db.delete_many(filter_)
+            listing_mongo_db.insert_many(listing_db.query("Exchange == @exchange").to_dict("records"))
 
         send_message(token=bot_key, message=f"{dt.today().date()} FINISH LISTING DB RENEW", chat_id=chat_id)
 
@@ -51,21 +58,13 @@ class VolumeJob:
 
         grabber = Grabber()
         tools = Tools()
-        token_info = grabber.get_token_info(num=num)
-        new_db = pd.concat([tools.volume_db, token_info], axis=0)
-        tools.to_db(name="volume", data=new_db, index=True)
-        tools.to_online_db(name="volume", data=new_db, index=True)
+        token_info = grabber.get_token_info(num=num).reset_index()
+
+        # update to mongo DB
+        volume_mongo_db = tools.init_collection("TradingVolumeDB", "Volume")
+        volume_mongo_db.insert_many(token_info.to_dict("records"))
 
         send_message(token=bot_key, message=f"{dt.today().date()} FINISH VOLUME DB RENEW", chat_id=chat_id)
-
-
-class CleaningJob:
-    def __init__(self, config):
-        self.config = config
-        self.name = "CleaningJob"
-
-    def run(self):
-        pass
 
 
 class ReportJob:
@@ -75,12 +74,12 @@ class ReportJob:
         self.formatter = Formatter()
         self.name = "ReportJob"
 
-    def run(self, date: str, cat: str, num: int):
+    def run(self, date: str, cat: str, num: int, test: bool = False):
         if date is None:
             date = (dt.today() - td(days=1)).date().strftime("%Y%m%d")
 
         bot_key = self.config["BOT_KEY"]
-        chat_id = self.config["REPORT_CHAT_ID"]
+        chat_id = self.config["REPORT_CHAT_ID"] if not test else self.config["DAVID_CHAT_ID"]
 
         # top 10
         top_volume_tokens = self.tools.get_unlisted_token_with_top_volume(date, cat)
@@ -104,9 +103,31 @@ class ReportJob:
             f"1.1 ⚠️Tier 1 ⚠️:\n</a>{tier1_table}<a>\n"
             f"1.2 Tier 2:\n</a>"
             f"{tier2_table}\n\n"
-            f"<a>2. New tokens in top 200 :\n"
-            f"2.1 ⚠ Tier 1 ⚠:\n</a>"
-            f"{new_tokens_table}"
         )
 
-        send_message(token=bot_key, message=message, chat_id=chat_id)
+        message2 = f"<a>2. New tokens in top 200 :\n" f"2.1 ⚠ Tier 1 ⚠:\n</a>" f"{new_tokens_table}"
+
+        for msg in [message, message2]:
+            send_message(token=bot_key, message=msg, chat_id=chat_id)
+
+
+class FillMongoDBJob:
+    def __init__(self, config):
+        self.config = config
+        self.name = "FillMongoDBJob"
+
+    def run(self):
+        bot_key = self.config["BOT_KEY"]
+        chat_id = self.config["DAVID_CHAT_ID"]
+
+        tools = Tools()
+        volume_length = tools.fill_mongodb(fill_type="volume")
+        exchange_length = tools.fill_mongodb(fill_type="listing")
+
+        send_message(
+            token=bot_key,
+            message=f"{dt.today().date()} FINISH FILLING MONGODB\n"
+            f"Volume DB: {volume_length} dates\n"
+            f"Exchange DB: {exchange_length} exchanges",
+            chat_id=chat_id,
+        )
