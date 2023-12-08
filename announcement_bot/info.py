@@ -1,6 +1,5 @@
 from datetime import datetime as dt
 
-import pandas as pd
 from lib.utils import ChatGroup, Permission, Tools
 from telegram import Update
 from telegram.ext import (
@@ -133,37 +132,6 @@ class InfoBot(ChatManager):
         )
         self.tools.update_chat_info(direction="up")
 
-    # this functions will fill db/chat/chat_info to mongodb AnnouncementDB.ChatInfo
-    async def fill_chat_info(self, update: Update, context: ContextTypes) -> None:
-        operator = update.effective_user
-        if not self.tools.is_admin(str(operator.id)):
-            self.logger.warning(f"{operator.full_name}({operator.id}) has no permission to fill chat info.")
-            return
-
-        old_chat_info = self.tools.init_chatinfo()
-        new_chat_info = self.tools.init_collection("AnnouncementDB", "ChatInfo")
-
-        new = 0
-        for _, row in old_chat_info.iterrows():
-            label = row["chat_cat"].split(",")
-            id = str(row["chat_id"])
-            name = row["chat_name"]
-            type = row["chat_type"]
-            description = row["note"] if not pd.isna(row["note"]) else ""
-            add_time = dt.strptime(row["chat_added_time"], "%Y-%m-%d").strftime("%Y-%m-%d %H:%M:%S")
-            chat = ChatGroup(id=id, type=type, name=name, label=label, description=description, add_time=add_time)
-
-            # check whether the chat is in mongodb
-            filter_ = {"id": id}
-            if new_chat_info.count_documents(filter_) == 0:
-                new_chat_info.insert_one(chat.__dict__)
-                new += 1
-                self.logger.warning(f"Add {chat.name}({chat.id}) to AnnouncementDB.ChatInfo")
-            elif new_chat_info.count_documents(filter_) == 1:
-                self.logger.warning(f"{chat.name}({chat.id}) already in AnnouncementDB.ChatInfo")
-
-        self.logger.warning(f"Add {new} new chats to AnnouncementDB.ChatInfo")
-
     # this functions will fill lib/permission to mongodb AnnouncementDB.Permissions
     async def fill_permission(self, update: Update, context: ContextTypes) -> None:
         if not self.tools.is_admin(str(update.effective_user.id)):
@@ -201,7 +169,7 @@ class InfoBot(ChatManager):
         old_chat_info = self.tools.init_chatinfo()
 
         # need to extract all the columns between "Categopry" and "Note", not include them
-        start = online_db_columns.index("Category")
+        start = online_db_columns.index("Labels")
         end = online_db_columns.index("Note")
         category_list = online_db_columns[start + 1 : end]
 

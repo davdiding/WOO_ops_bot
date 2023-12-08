@@ -3,7 +3,6 @@ import logging
 import os
 from datetime import datetime, timezone
 
-import numpy as np
 import pandas as pd
 import pygsheets as pg
 import pymongo as pm
@@ -29,13 +28,10 @@ class Tools:
     )
     ONLIN_CHAT_INFO_TABLE_NAME = "Chat Infomation (formal)"
     CHAT_INFO_COLUMNS_MAP = {
-        "id": "id",
-        "type": "Type",
         "name": "Name",
-        "label": "Category",
-        "description": "Note",
+        "type": "Type",
         "add_time": "Added Time",
-        "update_time": "Updated Time",
+        "label": "Labels",
         "test_channel": "Test Channel",
         "maintenance": "Maintenance",
         "listing": "Listing",
@@ -45,6 +41,7 @@ class Tools:
         "dmm_program": "DMM Program",
         "vip_program": "VIP Program",
         "new_trading_competition": "New Trading Competition",
+        "description": "Note",
     }
     ANNOUNCEMENT_INFO_COLUMNS_MAP = {}
 
@@ -60,6 +57,7 @@ class Tools:
         self.mongo_client = self.init_mongo_client()
         self.gc_client = self.init_gc_client()
         self.permission = self.init_collection("AnnouncementDB", "Permissions")
+        self.logger = None
 
     def init_config(self) -> dict:
         return json.load(open(self.CONFIG_PATH, "r"))
@@ -97,14 +95,17 @@ class Tools:
     def init_chatinfo(self) -> pd.DataFrame:
         return pd.read_csv(self.OLD_CHAT_INFO_PATH, index_col=None)
 
-    def init_online_sheet(self, url: str, name: str) -> pd.DataFrame:
+    def init_online_sheet(self, url: str, name: str, to_type: str = "df") -> pd.DataFrame:
         ws = self.gc_client.open_by_url(url)
         sheet_names = [i.title for i in ws.worksheets()]
 
-        if name not in sheet_names:
-            return pd.DataFrame()
+        if to_type == "df":
+            if name not in sheet_names:
+                return pd.DataFrame()
+            else:
+                return ws.worksheet_by_title(name).get_as_df()
         else:
-            return ws.worksheet_by_title(name).get_as_df()
+            return ws.worksheet_by_title(name)
 
     def get_logger(self, name: str):
         log_path_map = {"InfoBot": self.INFO_BOT_LOG_PATH, "MainBot": self.MAIN_BOT_LOG_PATH}
@@ -119,7 +120,8 @@ class Tools:
         logger.setLevel(logging.INFO)
         logger.propagate = False
 
-        return logger
+        self.logger = logger
+        return self.logger
 
     def get_columns_name(self, col: str, input: str) -> str:
         """
@@ -137,6 +139,11 @@ class Tools:
             for k, v in self.CHAT_INFO_COLUMNS_MAP.items():
                 if v == col:
                     return k
+
+            _col = col.replace(" / ", " ").replace(" ", "_").lower()  # This indicate a new category
+            self.CHAT_INFO_COLUMNS_MAP[_col] = col
+            return _col
+
         elif input == "al":
             return self.ANNOUNCEMENT_INFO_COLUMNS_MAP[col]
         elif input == "ar":
@@ -144,72 +151,53 @@ class Tools:
                 if v == col:
                     return k
 
-    def update_chat_info(self, direction: str) -> None:
-        online_chat_info = self.init_online_chatinfo()
+    def update_chat_info(self, update_type: str) -> None:
+        """
+        param direction: 'download'/'upload'/'init'
+        1. download: download online sheet to mongoDB, detecting new category, new labels and notes,
+                     will be run when user want to post announcement
+        2. upload: upload mongoDB to online sheet, detecting new id, new name
+        3. init: init online sheet from mongoDB, online DB only have columns name
+        """
+        online_chat_info = self.init_online_sheet(self.ONLINE_CHAT_INFO_URL, self.ONLIN_CHAT_INFO_TABLE_NAME)
         chat_info = self.init_collection("AnnouncementDB", "ChatInfo")
-        if online_chat_info.empty:
+
+        if update_type == "init":
+            drop_columns = ["_id", "id", "update_time", "operator", "operator_id"]
+            chat_info = pd.DataFrame(list(chat_info.find({}))).drop(columns=drop_columns)
+            chat_info["label"] = chat_info["label"].apply(lambda x: ",".join(x))
+            chat_info = chat_info.replace({False: "x", True: ""})
+            chat_info.columns = [self.get_columns_name(col, "cl") for col in chat_info.columns]
+            chat_info = chat_info[list(self.CHAT_INFO_COLUMNS_MAP.values())]
+
+            # write chat_info to online sheet
+            ws = self.init_online_sheet(self.ONLINE_CHAT_INFO_URL, self.ONLIN_CHAT_INFO_TABLE_NAME, to_type="ws")
+            ws.set_dataframe(chat_info, (1, 1))
+            self.logger.info("Init online sheet from mongoDB successfully")
             return
 
-        # if direction is 'up', then update the AnnouncementDB.ChatInfo to online_chat_info
-        if direction == "up":
-            new_online_chat_info = []
-            # Use current online chat info label order to sort the AnnouncementDB.ChatInfo
-            label_order = online_chat_info["chat_cat"].unique()
-            for label in label_order:
-                lst = label.split(",")
-                filter_ = {"label": lst}
-                for i in chat_info.find(filter_):
-                    i["label"] = label
-                    new_online_chat_info.append(i)
-            new_online_chat_info = pd.DataFrame(new_online_chat_info).drop(
-                ["_id", "id", "operator", "operator_id"], axis=1
-            )[["name", "type", "add_time", "label", "description", "update_time"]]
-            new_online_chat_info.columns = [
-                "chat_name",
-                "chat_type",
-                "chat_added_time",
-                "chat_cat",
-                "note",
-                "updated_time",
-            ]
-
-            self.gc_client.open_by_url(self.ONLINE_CHAT_INFO_URL)[0].set_dataframe(
-                new_online_chat_info, (1, 1), headers=False
-            )
-
-        # if direction is 'down', then update the online_chat_info to AnnouncementDB.ChatInfo,
-        # mainly update the labels, description
-        if direction == "down":
-            missing = 0
-            update = 0
-            same = 0
+        elif update_type == "download":
             for _, row in online_chat_info.iterrows():
-                name = row["chat_name"]
-                labels = row["chat_cat"].split(",")
-                description = row["note"] if not pd.isna(row["note"]) else ""
-                update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                inputs = {self.get_columns_name(key, "cr"): value for key, value in row.items()}
+                inputs["id"] = None
+                online_chat = ChatGroup(**inputs)
 
-                filter_ = {"name": name}
-
-                if chat_info.count_documents(filter_) == 0:
-                    missing += 1
-                    print(f"{name} not in AnnouncementDB.ChatInfo when udpate online_chat_info labels")
-                else:
-                    for i in chat_info.find(filter_):
-                        old_chat = i
-                        del old_chat["_id"]
-
-                    old_chat = ChatGroup(**old_chat)
-                    if (old_chat.label != labels) or (old_chat.description != description):
-                        old_chat.label = labels
-                        old_chat.description = description
-                        old_chat.update_time = update_time
-                        chat_info.update_one(filter_, {"$set": old_chat.__dict__})
-                        update += 1
-                    else:
-                        same += 1
+                filter_ = {"name": online_chat.name}
+                if chat_info.count_documents(filter_) > 1:
+                    logging.warning(f"More than one chat has name: {online_chat.name}")
                     continue
-        return {"missing": missing, "update": update, "same": same}
+                elif chat_info.count_documents(filter_) == 0:
+                    logging.warning(f"Unknow chat: {online_chat.name} in online sheet")
+                    continue
+
+                del online_chat.id  # This chat_id is fake
+                chat_info.update_one(filter_, {"$set": online_chat.__dict__})
+
+            self.logger.info("Download online sheet to mongoDB successfully")
+            return
+
+        elif update_type == "upload":
+            drop_columns = ["_id", "id", "update_time", "operator", "operator_id"]
 
 
 class TGTestCases:
@@ -330,15 +318,27 @@ class ChatGroup:
         self.type = type
         self.name = name
         self.label = label.split(",") if isinstance(label, str) else label
-        self.description = description if not np.isnan(description) else ""
+        self.description = self.handle_description(description)
         self.add_time = add_time
         self.update_time = update_time
         self.operator = operator
         self.operator_id = operator_id
         self.handle_kwargs(kwargs)
 
+    def handle_description(self, description: any) -> str:
+        if description is None:
+            return ""
+        elif isinstance(description, str):
+            return description
+        else:
+            return ""
+
     def handle_kwargs(self, kwargs: dict):
         for k, v in kwargs.items():
+            if v == "":
+                v = True
+            elif v == "x":
+                v = False
             setattr(self, k, v)
 
     def add_label(self, label: str):

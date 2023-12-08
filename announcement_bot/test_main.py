@@ -27,7 +27,4 @@ class TestInfoBot(unittest.TestCase):
         self.info_bot.fill_permission(self.test_cases.bot_command(command="fill_permission"), None)
 
     def test_update_chat_labels(self):
-        result = self.info_bot.tools.update_chat_info(direction="down")
-        print(result)
-        self.info_bot.tools.update_chat_info(direction="up")
-        return
+        self.info_bot.tools.update_chat_info("download")
