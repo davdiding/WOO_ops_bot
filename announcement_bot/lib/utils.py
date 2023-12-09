@@ -176,7 +176,9 @@ class Tools:
             self.logger.info("Init online sheet from mongoDB successfully")
             return
 
+        # In current method, if an category was deleted, it will be deleted in mongoDB
         elif update_type == "download":
+            missing_columns = ["id", "update_time", "operator", "operator_id"]
             for _, row in online_chat_info.iterrows():
                 inputs = {self.get_columns_name(key, "cr"): value for key, value in row.items()}
                 inputs["id"] = None
@@ -189,10 +191,14 @@ class Tools:
                 elif chat_info.count_documents(filter_) == 0:
                     logging.warning(f"Unknow chat: {online_chat.name} in online sheet")
                     continue
+                else:
+                    chat = chat_info.find_one(filter_)
 
-                del online_chat.id  # This chat_id is fake
-                chat_info.update_one(filter_, {"$set": online_chat.__dict__})
+                for i in missing_columns:
+                    online_chat.__setattr__(i, chat[i])
 
+                chat_info.delete_one(filter_)
+                chat_info.insert_one(online_chat.__dict__)
             self.logger.info("Download online sheet to mongoDB successfully")
             return
 
