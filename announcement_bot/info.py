@@ -1,6 +1,7 @@
+import argparse
 from datetime import datetime as dt
 
-from lib.utils import ChatGroup, Permission, Tools
+from lib.utils import ChatGroup, Tools, init_args
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -14,11 +15,15 @@ from telegram.ext import (
 
 class ChatManager:
     def get_chat_status(self, update) -> list:
-        old_status = update.my_chat_member.old_chat_member.status
-        new_status = update.my_chat_member.new_chat_member.status
+        old_status = str(update.my_chat_member.old_chat_member.status)
+        new_status = str(update.my_chat_member.new_chat_member.status)
         if old_status == "left" and new_status == "member":
             return "add"
         elif old_status == "member" and new_status == "left":
+            return "left"
+        elif old_status == "left" and new_status == "administrator":
+            return "add"
+        elif old_status == "administrator" and new_status == "left":
             return "left"
         else:
             return None
@@ -37,123 +42,99 @@ class InfoBot(ChatManager):
         "note": "description",
     }
 
-    def __init__(self, test: bool = True):
+    def __init__(self, test: bool = False):
         super().__init__()
         self.is_test = test
         self.tools = Tools()
         self.logger = self.tools.get_logger("InfoBot")
 
     async def chat_status_update(self, update: Update, context: ContextTypes) -> None:
-        operator = update.effective_user
-
-        # will do nothing if the operator is not admin
-        if not self.tools.is_admin(str(operator.id)):
-            self.logger.warning(
-                f"{operator.full_name}({operator.id}) has no permission to add/remove announcement bot."
-            )
-            return
-
-        operator_name = str(operator.full_name)
-        opreator_id = str(operator.id)
-
-        status = self.get_chat_status(update)
-        if status is None:
-            self.logger.warning(f"Unknown status change operated by {operator_name}({opreator_id})\n{update}")
-
-        chat = update.effective_chat
-        id = str(chat.id)
-        name = str(chat.title)
-        type = str(chat.type)
-        description = ""
-        add_time = dt.now().strftime("%Y-%m-%d %H:%M:%S")
-        label = []
-        update_time = add_time
-        group = ChatGroup(
-            id=id,
-            type=type,
-            name=name,
-            label=label,
-            description=description,
-            add_time=add_time,
-            update_time=update_time,
-            operator=operator_name,
-            operator_id=opreator_id,
-        )
+        operator = self.tools.handle_operator(update)
 
         chat_info = self.tools.init_collection("AnnouncementDB", "ChatInfo")
 
-        filter_ = {"id": id}
+        status = self.get_chat_status(update)
+        if status is None:
+            self.logger.warning(f"Unknown status change operated by {operator['name']}({operator['id']})\n{update}")
+            return
+
+        chat = update.effective_chat
+
+        inputs = {
+            "id": chat.id,
+            "type": str(chat.type),
+            "name": str(chat.title),
+            "label": [],
+            "description": "",
+            "add_time": dt.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "update_time": dt.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "operator": operator["name"],
+            "operator_id": operator["id"],
+        }
+
+        # add old category to new group
+        existing_chat = chat_info.find_one({})
+        for i in existing_chat:
+            if i in inputs or i == "_id":
+                continue
+            inputs[i] = True
+        new_chat = ChatGroup(**inputs)
+
+        filter_ = {"id": new_chat.id}
         if status == "add":  # insert new chat
+            # will do nothing if the operator is not admin
+            if not self.tools.is_admin(str(operator["id"])):
+                self.logger.warning(f"{operator['name']}({operator['id']}) has no permission to add announcement bot.")
+                return
+
             if chat_info.count_documents(filter_) == 0:
-                chat_info.insert_one(group.__dict__)
-                self.logger.warning(
-                    f"Add {group.name}({group.id}) to AnnouncementDB.ChatInfo by {operator_name}({opreator_id})"
+                chat_info.insert_one(new_chat.__dict__)
+                self.logger.info(
+                    f"Add {new_chat.name}({new_chat.id}) to AnnouncementDB.ChatInfo by "
+                    f"{operator['name']}({operator['id']})"
                 )
             else:
-                self.logger.warning(f"{group.name}({group.id}) already in AnnouncementDB.ChatInfo")
+                self.logger.warning(f"{new_chat.name}({new_chat.id}) already in AnnouncementDB.ChatInfo")
         else:  # delete chat
             if chat_info.count_documents(filter_) == 1:
                 chat_info.delete_one(filter_)
-                self.logger.warning(
-                    f"Delete {group.name}({group.id}) from AnnouncementDB.ChatInfo by {operator_name}({opreator_id})"
+                self.logger.info(
+                    f"Delete {new_chat.name}({new_chat.id}) from AnnouncementDB.ChatInfo by "
+                    f"{operator['name']}({operator['id']})"
                 )
             else:
-                self.logger.warning(f"{group.name}({group.id}) not in AnnouncementDB.ChatInfo")
-        self.tools.update_chat_info(direction="up")
+                self.logger.warning(f"{new_chat.name}({new_chat.id}) not in AnnouncementDB.ChatInfo")
+        self.tools.update_chat_info(update_type="upload")
 
     async def chat_title_update(self, update: Update, context: ContextTypes) -> None:
-        operator = update.effective_user
         chat = update.effective_chat
+        operator = self.tools.handle_operator(update)
 
         # if the chat not in our DB, do nothing
         chat_info = self.tools.init_collection("AnnouncementDB", "ChatInfo")
         filter_ = {"id": str(chat.id)}
         if chat_info.count_documents(filter_) == 0:
             self.logger.warning(
-                f"{chat.title}({chat.id}) not in DB, chat name changed by {operator.full_name}({operator.id})"
+                f"{chat.title}({chat.id}) not in DB, chat name changed by {operator['name']}({operator['id']})"
             )
             return
         else:
             old_chat = chat_info.find_one(filter_)
             del old_chat["_id"]
 
-        old_chat = ChatGroup(**old_chat)
-        old_chat_name = old_chat.name
-        old_chat.name = str(chat.title)
-        old_chat.update_time = dt.now().strftime("%Y-%m-%d %H:%M:%S")
-        old_chat.type = str(chat.type)
+        new_chat = ChatGroup(**old_chat)
+        old_chat_name = new_chat.name
+        new_chat.name = str(chat.title)
+        new_chat.update_time = dt.now().strftime("%Y-%m-%d %H:%M:%S")
+        new_chat.type = str(chat.type)
 
-        chat_info.update_one(filter_, {"$set": old_chat.__dict__})
+        chat_info.update_one(filter_, {"$set": new_chat.__dict__})
 
-        self.logger.warning(
-            f"Update {old_chat_name}({old_chat.id}) to new name: {old_chat.name} by {operator.full_name}({operator.id})"
-        )
         self.tools.update_chat_info(update_type="upload")
-
-    # this functions will fill lib/permission to mongodb AnnouncementDB.Permissions
-    async def fill_permission(self, update: Update, context: ContextTypes) -> None:
-        if not self.tools.is_admin(str(update.effective_user.id)):
-            self.logger.warning(
-                f"{update.effective_user.full_name}({update.effective_user.id}) has no permission to fill permission."
-            )
-            return
-
-        old_permission = self.tools.init_permission()
-        new_permission = self.tools.init_collection("AnnouncementDB", "Permissions")
-        for _, row in old_permission.iterrows():
-            id = str(row["id"])
-            name = str(row["name"])
-            is_admin = bool(row["admin"])
-            in_whitelist = bool(row["whitelist"])
-
-            permission = Permission(id=id, name=name, admin=is_admin, whitelist=in_whitelist)
-
-            filter_ = {"id": id}
-            if new_permission.count_documents(filter_) == 0:
-                new_permission.insert_one(permission.__dict__)
-                self.logger.warning(f"Add {permission.name}({permission.id}) to AnnouncementDB.Permissions")
-            elif new_permission.count_documents(filter_) == 1:
-                self.logger.warning(f"{permission.name}({permission.id}) already in AnnouncementDB.Permissions")
+        self.logger.info(
+            f"Update {old_chat_name}({new_chat.id}) to new name: {new_chat.name} "
+            f"by {operator['name']}({operator['id']})"
+        )
 
     # This function will move chat_info.csv to mongodb, will not used in the future
     async def copy_chat_info(self, update: Update, context: ContextTypes) -> None:
@@ -180,11 +161,23 @@ class InfoBot(ChatManager):
             for category in category_list:
                 _category = self.tools.get_columns_name(category, input="cr")
                 if _category is None:
+                    self.logger.warning(f"Unknown category: {category}")
                     continue
                 inputs[_category] = True
             chat = ChatGroup(**inputs)
             new_chat_info.insert_one(chat.__dict__)
         self.logger.info(f"Add {new_chat_info.count_documents({})} chats to AnnouncementDB.ChatInfo")
+
+    async def update_chat_info(self, update: Update, context: ContextTypes) -> None:
+        operator = update.effective_user
+        if not self.tools.is_admin(str(operator.id)):
+            self.logger.warning(f"{operator.full_name}({operator.id}) has no permission to update chat info.")
+            return
+        self.tools.update_chat_info(update_type="download")
+        self.tools.update_chat_info(update_type="upload")
+        self.logger.info(f"Update chat info by {operator.full_name}({operator.id})")
+
+        await update.message.reply_text(f"Chat info updated at {dt.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
     def run(self):
         self.logger.warning("InfoBot is running...")
@@ -193,16 +186,14 @@ class InfoBot(ChatManager):
         )
         application.add_handler(ChatMemberHandler(self.chat_status_update, ChatMemberHandler.MY_CHAT_MEMBER))
         application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_TITLE, self.chat_title_update))
-
-        # add fill_chat_info command
-        application.add_handler(CommandHandler("fill_chat_info", self.fill_chat_info))
-
-        # add fill_permission command
-        application.add_handler(CommandHandler("fill_permission", self.fill_permission))
+        application.add_handler(CommandHandler("sync", self.update_chat_info))
 
         application.run_polling()
 
 
 if __name__ == "__main__":
-    info_bot = InfoBot()
+    parser = argparse.ArgumentParser("InfoBot")
+    args = init_args(parser)
+
+    info_bot = InfoBot(test=args.test)
     info_bot.run()

@@ -1,3 +1,4 @@
+import argparse
 import json
 import logging
 import os
@@ -9,12 +10,25 @@ import pymongo as pm
 from telegram import (
     Chat,
     ChatMember,
+    ChatMemberAdministrator,
+    ChatMemberBanned,
+    ChatMemberLeft,
     ChatMemberUpdated,
     Message,
     MessageEntity,
     Update,
     User,
 )
+
+
+def init_args(parser: argparse.ArgumentParser):
+    parser.add_argument(
+        "--test",
+        action="store_true",
+        default=False,
+        help="Run in test mode, default is False",
+    )
+    return parser.parse_args()
 
 
 class Tools:
@@ -218,14 +232,28 @@ class Tools:
             )
 
             ws = self.init_online_sheet(self.ONLINE_CHAT_INFO_URL, self.ONLIN_CHAT_INFO_TABLE_NAME, to_type="ws")
+            ws.clear()
             ws.set_dataframe(chat_info, (1, 1))
             self.logger.info("Upload mongoDB to online sheet successfully")
+
+    def handle_operator(self, update: Update) -> dict:
+        result = {}
+        chat = update.effective_chat
+        operator = update.effective_user
+
+        if operator is None and str(chat.type) == "channel":
+            result["name"] = "channel admin"
+            result["id"] = "channel admin"
+        else:
+            result["name"] = operator.full_name
+            result["id"] = operator.id
+        return result
 
 
 class TGTestCases:
     @staticmethod
     def create_chat_member_updated(chat_id, from_user, old_status, new_status, bot_user):
-        chat = Chat(id=chat_id, type="group")
+        chat = Chat(id=chat_id, type="group", title="utils_test")
         old_chat_member = ChatMember(status=old_status, user=bot_user)
         new_chat_member = ChatMember(status=new_status, user=bot_user)
         return ChatMemberUpdated(
@@ -320,6 +348,121 @@ class TGTestCases:
         )
 
         return Update(update_id=943740124, message=message)
+
+    def channel_rename(self):
+        chat = Chat(id=-1001604659147, title="v3 test channel1", type=Chat.CHANNEL)
+        message = Message(
+            channel_chat_created=False,
+            chat=chat,
+            date=datetime(2023, 12, 9, 4, 47, 40, tzinfo=timezone.utc),
+            delete_chat_photo=False,
+            group_chat_created=False,
+            message_id=107,
+            new_chat_title="v3 test channel1",
+            sender_chat=chat,
+            supergroup_chat_created=False,
+        )
+        return Update(update_id=4017415, channel_post=message)
+
+    def channel_add(self):
+        chat = Chat(id=-1001604659147, title="Test Channel", type=Chat.CHANNEL)
+        from_user = User(
+            id=5327851721,
+            is_bot=False,
+            first_name="David",
+            last_name="Ding",
+            username="Davidding_WG",
+            language_code="en",
+        )
+        new_chat_member = ChatMemberAdministrator(
+            api_kwargs={"can_manage_voice_chats": True},
+            can_be_edited=False,
+            can_change_info=True,
+            can_delete_messages=True,
+            can_delete_stories=False,
+            can_edit_messages=True,
+            can_edit_stories=False,
+            can_invite_users=True,
+            can_manage_chat=True,
+            can_manage_video_chats=True,
+            can_post_messages=True,
+            can_post_stories=False,
+            can_promote_members=False,
+            can_restrict_members=True,
+            is_anonymous=False,
+            user=User(first_name="WOO Announcements", id=5699456248, is_bot=True, username="WOO_Announcement_Bot"),
+        )
+        old_chat_member = ChatMemberBanned(
+            until_date=datetime(1970, 1, 1, 0, 0, tzinfo=timezone.utc),
+            user=User(first_name="WOO Announcements", id=5699456248, is_bot=True, username="WOO_Announcement_Bot"),
+        )
+        return Update(
+            update_id=4017418,
+            my_chat_member=ChatMemberUpdated(
+                chat=chat,
+                date=datetime(2023, 12, 9, 5, 47, 11, tzinfo=timezone.utc),
+                from_user=from_user,
+                new_chat_member=new_chat_member,
+                old_chat_member=old_chat_member,
+            ),
+        )
+
+    def channel_left(self):
+        chat = Chat(
+            id=-1001604659147,
+            title="Test Channel",
+            type=Chat.CHANNEL,
+        )
+
+        from_user = User(
+            id=5327851721,
+            is_bot=False,
+            first_name="David",
+            last_name="Ding",
+            username="Davidding_WG",
+            language_code="en",
+        )
+
+        bot_user = User(
+            first_name="WOO Announcements",
+            id=5699456248,
+            is_bot=True,
+            username="WOO_Announcement_Bot",
+        )
+
+        old_chat_member = ChatMemberAdministrator(
+            api_kwargs={"can_manage_voice_chats": True},
+            can_be_edited=False,
+            can_change_info=True,
+            can_delete_messages=True,
+            can_delete_stories=False,
+            can_edit_messages=True,
+            can_edit_stories=False,
+            can_invite_users=True,
+            can_manage_chat=True,
+            can_manage_video_chats=True,
+            can_post_messages=True,
+            can_post_stories=False,
+            can_promote_members=False,
+            can_restrict_members=True,
+            is_anonymous=False,
+            user=User(first_name="WOO Announcements", id=5699456248, is_bot=True, username="WOO_Announcement_Bot"),
+        )
+
+        new_chat_member = ChatMemberLeft(user=bot_user)
+
+        chat_member_update = ChatMemberUpdated(
+            chat=chat,
+            from_user=from_user,
+            date=datetime.now(timezone.utc),
+            old_chat_member=old_chat_member,
+            new_chat_member=new_chat_member,
+        )
+
+        return Update(
+            update_id=4017419,
+            my_chat_member=chat_member_update,
+        )
 
 
 class ChatGroup:
