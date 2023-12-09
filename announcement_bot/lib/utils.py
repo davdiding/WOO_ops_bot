@@ -187,10 +187,10 @@ class Tools:
 
                 filter_ = {"name": online_chat.name}
                 if chat_info.count_documents(filter_) > 1:
-                    logging.warning(f"More than one chat has name: {online_chat.name}")
+                    self.logger.warning(f"More than one chat has name: {online_chat.name}")
                     continue
                 elif chat_info.count_documents(filter_) == 0:
-                    logging.warning(f"Unknow chat: {online_chat.name} in online sheet")
+                    self.logger.warning(f"Unknow chat: {online_chat.name} in online sheet")
                     continue
                 else:
                     chat = chat_info.find_one(filter_)
