@@ -76,9 +76,9 @@ class InfoBot(ChatManager):
             description=description,
             add_time=add_time,
             update_time=update_time,
+            operator=operator_name,
+            operator_id=opreator_id,
         )
-        group.operator = operator_name
-        group.operator_id = opreator_id
 
         chat_info = self.tools.init_collection("AnnouncementDB", "ChatInfo")
 
@@ -110,14 +110,12 @@ class InfoBot(ChatManager):
         filter_ = {"id": str(chat.id)}
         if chat_info.count_documents(filter_) == 0:
             self.logger.warning(
-                f"Can't update {chat.title}({chat.id}) because it's not in AnnouncementDB.ChatInfo. "
-                f"Chat name changed by {operator.full_name}({operator.id})"
+                f"{chat.title}({chat.id}) not in DB, chat name changed by {operator.full_name}({operator.id})"
             )
             return
         else:
-            for i in chat_info.find(filter_):
-                old_chat = i
-                del old_chat["_id"]
+            old_chat = chat_info.find_one(filter_)
+            del old_chat["_id"]
 
         old_chat = ChatGroup(**old_chat)
         old_chat_name = old_chat.name
@@ -128,9 +126,9 @@ class InfoBot(ChatManager):
         chat_info.update_one(filter_, {"$set": old_chat.__dict__})
 
         self.logger.warning(
-            f"Update {old_chat_name}({old_chat.id}) by {operator.full_name}({operator.id}) to new name: {old_chat.name}"
+            f"Update {old_chat_name}({old_chat.id}) to new name: {old_chat.name} by {operator.full_name}({operator.id})"
         )
-        self.tools.update_chat_info(direction="up")
+        self.tools.update_chat_info(update_type="upload")
 
     # this functions will fill lib/permission to mongodb AnnouncementDB.Permissions
     async def fill_permission(self, update: Update, context: ContextTypes) -> None:
@@ -157,8 +155,8 @@ class InfoBot(ChatManager):
             elif new_permission.count_documents(filter_) == 1:
                 self.logger.warning(f"{permission.name}({permission.id}) already in AnnouncementDB.Permissions")
 
-    # This function will move chat_info.csv to mongodb
-    def update_chat_info(self, update: Update, context: ContextTypes) -> None:
+    # This function will move chat_info.csv to mongodb, will not used in the future
+    async def copy_chat_info(self, update: Update, context: ContextTypes) -> None:
         operator = update.effective_user
         if not self.tools.is_admin(str(operator.id)):
             self.logger.warning(f"{operator.full_name}({operator.id}) has no permission to update chat info.")
