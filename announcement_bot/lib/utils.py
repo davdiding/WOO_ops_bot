@@ -90,7 +90,7 @@ class Tools:
 
     def in_whitelist(self, id: str) -> bool:
         filter_ = {"id": id}
-        result = self.permission.find_one(filter_)
+        result = self.permission.find(filter_)
         if result is None:
             return False
         for i in result:
@@ -248,6 +248,38 @@ class Tools:
             result["name"] = operator.full_name
             result["id"] = operator.id
         return result
+
+    def get_category(self) -> list:
+        chat_info = self.init_collection("AnnouncementDB", "ChatInfo")
+        chat1 = chat_info.find_one({})
+        chat2 = chat_info.find_one({})
+
+        non_category_columns = [
+            "_id",
+            "id",
+            "update_time",
+            "operator",
+            "operator_id",
+            "label",
+            "name",
+            "type",
+            "add_time",
+            "description",
+        ]
+
+        category1 = set(chat1.keys()) - set(non_category_columns)
+        category2 = set(chat2.keys()) - set(non_category_columns)
+
+        category_mismatch = category1.symmetric_difference(category2)
+        for category in category_mismatch:
+            self.logger.warning(f"Category {category} mismatch")
+
+        return sorted(list(category1))
+
+    def get_category_pattern(self) -> str:
+        category = self.get_category()
+        category.append("others")
+        return "|".join(category)
 
 
 class TGTestCases:

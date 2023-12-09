@@ -51,6 +51,7 @@ class InfoBot(ChatManager):
     async def chat_status_update(self, update: Update, context: ContextTypes) -> None:
         operator = self.tools.handle_operator(update)
 
+        self.update_chat_info("download")
         chat_info = self.tools.init_collection("AnnouncementDB", "ChatInfo")
 
         status = self.get_chat_status(update)
@@ -111,6 +112,7 @@ class InfoBot(ChatManager):
         operator = self.tools.handle_operator(update)
 
         # if the chat not in our DB, do nothing
+        self.update_chat_info("download")
         chat_info = self.tools.init_collection("AnnouncementDB", "ChatInfo")
         filter_ = {"id": str(chat.id)}
         if chat_info.count_documents(filter_) == 0:
@@ -180,7 +182,7 @@ class InfoBot(ChatManager):
         await update.message.reply_text(f"Chat info updated at {dt.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
     def run(self):
-        self.logger.warning("InfoBot is running...")
+        self.logger.info("InfoBot is running...")
         application = (
             Application.builder().token(self.tools.config[self.TEST_BOT_KEY if self.is_test else self.BOT_KEY]).build()
         )
