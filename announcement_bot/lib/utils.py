@@ -157,6 +157,7 @@ class Tools:
         1. download: download online sheet to mongoDB, detecting new category, new labels and notes,
                      will be run when user want to post announcement
         2. upload: upload mongoDB to online sheet, detecting new id, new name
+                   will be run when bot been added new chat or left chat or chat name changed
         3. init: init online sheet from mongoDB, online DB only have columns name
         """
         online_chat_info = self.init_online_sheet(self.ONLINE_CHAT_INFO_URL, self.ONLIN_CHAT_INFO_TABLE_NAME)
@@ -204,6 +205,21 @@ class Tools:
 
         elif update_type == "upload":
             drop_columns = ["_id", "id", "update_time", "operator", "operator_id"]
+            chat_info = pd.DataFrame(list(chat_info.find({}))).drop(columns=drop_columns)
+            chat_info["label"] = chat_info["label"].apply(lambda x: ",".join(x))
+            chat_info = chat_info.replace({False: "x", True: ""})
+            chat_info.columns = [self.get_columns_name(col, "cl") for col in chat_info.columns]
+            chat_info = chat_info[list(self.CHAT_INFO_COLUMNS_MAP.values())]
+
+            original_labels_order = online_chat_info["Labels"].unique().tolist()
+
+            chat_info = chat_info.sort_values(
+                by="Labels", key=lambda x: x.map({label: i for i, label in enumerate(original_labels_order)})
+            )
+
+            ws = self.init_online_sheet(self.ONLINE_CHAT_INFO_URL, self.ONLIN_CHAT_INFO_TABLE_NAME, to_type="ws")
+            ws.set_dataframe(chat_info, (1, 1))
+            self.logger.info("Upload mongoDB to online sheet successfully")
 
 
 class TGTestCases:
