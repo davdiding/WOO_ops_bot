@@ -9,4 +9,4 @@ gcs_key.json
 archive/
 gc_key.json
 trading_volume_tracker_v2/db/img
-test*
+test_main.py

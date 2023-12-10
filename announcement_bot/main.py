@@ -1,7 +1,7 @@
 from datetime import datetime as dt
 
 from lib.utils import Announcement, Tools
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -18,16 +18,18 @@ CATEGORY, LANGUAGE, LABELS, CONTENT, CONFIRMATION = range(5)
 class AnnouncementBot:
     BOT_KEY = "MAIN_BOT_KEY"
     TEST_BOT_KEY = "TEST_MAIN_BOT_KEY"
+    CONFIRMATION_GROUP = "APPROVE_GROUP_ID"
 
     def __init__(self) -> None:
         self.is_test = False
         self.tools = Tools()
         self.logger = self.tools.get_logger("MainBot")
+        self.bot = Bot(self.tools.config[self.TEST_BOT_KEY if self.is_test else self.BOT_KEY])
 
     async def post(self, update: Update, context: ContextTypes) -> int:
         operator = update.message.from_user
 
-        if not self.tools.in_whitelist(str(operator.id)):
+        if not self.tools.in_whitelist(operator.id):
             await update.message.reply_text(f"Hi {operator.full_name}, You are not in the whitelist")
             return ConversationHandler.END
         self.tools.update_chat_info("download")
@@ -50,6 +52,7 @@ class AnnouncementBot:
         await update.message.reply_text(message, reply_markup=reply_markup)
 
         inputs = {
+            "id": self.tools.get_annc_id(),
             "create_time": dt.now(),
             "creator": operator.full_name,
             "creator_id": operator.id,
@@ -113,20 +116,91 @@ class AnnouncementBot:
         message = update.message
         user = update.message.from_user
 
+        # check content type
+        photo = message.photo
+        video = message.video
+        content_text = message.caption if message.caption else message.text if message.text else ""
+        content_html = message.caption_html if message.caption_html else message.text_html if message.text_html else ""
+
+        if len(photo) != 0:  # photo condition
+            file_id = photo[3].file_id
+            annc_type = "photo"
+
+        elif video is not None:  # video condition
+            file_id = video.file_id
+            annc_type = "video"
+
+        else:  # Only text condition
+            file_id = ""
+            annc_type = "text"
+
+        file = await self.tools.save_file(file_id, self.bot)
+
+        update_ = {
+            "content_type": annc_type,
+            "content_text": content_text,
+            "content_html": content_html,
+            "file_path": file["path"],
+            "available_chats": self.tools.get_chat_by_announcement(context.user_data["announcement"]),
+        }
+
+        context.user_data["announcement"].update(**update_)
+
+        method_map = {
+            "photo": context.bot.send_photo,
+            "video": context.bot.send_video,
+            "text": context.bot.send_message,
+        }
+
         keyboard = [
-            [InlineKeyboardButton("Yes", callback_data="yes")],
-            [InlineKeyboardButton("No", callback_data="no")],
+            [InlineKeyboardButton("Approve", callback_data="approve")],
+            [InlineKeyboardButton("Reject", callback_data="reject")],
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        message = f"Please confirm your post:\n"
 
-        await context.bot.send_message("-836971986", message, reply_markup=reply_markup)
+        if annc_type in ["photo", "video"]:
+            inputs = {
+                "chat_id": self.tools.config[self.CONFIRMATION_GROUP],
+                annc_type: file["id"],
+                "caption": self.tools.get_confirm_message(context.user_data["announcement"]),
+                "parse_mode": "HTML",
+                "reply_markup": reply_markup,
+            }
+
+        else:
+            inputs = {
+                "chat_id": self.tools.config[self.CONFIRMATION_GROUP],
+                "text": self.tools.get_confirm_message(context.user_data["announcement"]),
+                "parse_mode": "HTML",
+                "reply_markup": reply_markup,
+            }
+
+        await method_map[annc_type](**inputs)
+
+        self.logger.info(f"Announcement {context.user_data['announcement'].id} sent to admin group")
+
+        if message.chat.type == "private":
+            message = (
+                f"Your post has been sent to the admin group for approval, "
+                f"please wait patiently.\n"
+                f"ID: {context.user_data['announcement'].id}"
+            )
+            await update.message.reply_text(message)
+            return ConversationHandler.END
 
         return CONFIRMATION
 
     async def confirmation(self, update: Update, context: ContextTypes) -> int:
         query = update.callback_query
-        print(query.data)
+
+        operator = query.from_user
+        annc = context.user_data["announcement"]
+
+        if self.tools.is_admin(operator.id):
+            pass
+
+        else:
+            self.logger.warn(f"Unauthorized user {operator.full_name}({operator.id}) tried to post")
 
     async def cancel(self, update: Update, context: ContextTypes) -> int:
         operator = update.message.from_user
