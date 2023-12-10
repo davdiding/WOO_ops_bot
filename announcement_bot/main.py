@@ -120,8 +120,7 @@ class AnnouncementBot:
         reply_markup = InlineKeyboardMarkup(keyboard)
         message = f"Please confirm your post:\n"
 
-        # await context.bot.send_message("-836971986", message, reply_markup=reply_markup)
-        await update.message.reply_text(message, reply_markup=reply_markup)
+        await context.bot.send_message("-836971986", message, reply_markup=reply_markup)
 
         return CONFIRMATION
 
@@ -157,6 +156,7 @@ class AnnouncementBot:
                 CONFIRMATION: [CallbackQueryHandler(self.confirmation, pattern="^(yes|no)$")],
             },
             fallbacks=[CommandHandler("cancel", self.cancel)],
+            per_chat=False,
         )
 
         application.add_handler(post_handler)
