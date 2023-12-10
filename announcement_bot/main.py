@@ -1,4 +1,6 @@
-from lib.utils import Tools
+from datetime import datetime as dt
+
+from lib.utils import Announcement, Tools
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     Application,
@@ -10,7 +12,7 @@ from telegram.ext import (
     filters,
 )
 
-POST, CATEGORY, LANGUAGE, LABELS, CONTENT, CONFIRMATION = range(6)
+CATEGORY, LANGUAGE, LABELS, CONTENT, CONFIRMATION = range(5)
 
 
 class AnnouncementBot:
@@ -26,7 +28,7 @@ class AnnouncementBot:
         operator = update.message.from_user
 
         if not self.tools.in_whitelist(str(operator.id)):
-            await update.message.reply_text(f"Hi {operator.full_name} \nYou are not in the whitelist")
+            await update.message.reply_text(f"Hi {operator.full_name}, You are not in the whitelist")
             return ConversationHandler.END
         self.tools.update_chat_info("download")
 
@@ -47,13 +49,19 @@ class AnnouncementBot:
 
         await update.message.reply_text(message, reply_markup=reply_markup)
 
-        return POST
+        inputs = {
+            "create_time": dt.now(),
+            "creator": operator.full_name,
+            "creator_id": operator.id,
+        }
+        context.user_data["announcement"] = Announcement(**inputs)
+        return CATEGORY
 
     async def choose_category(self, update: Update, context: ContextTypes) -> int:
         query = update.callback_query
         print(query.data)
+        context.user_data["announcement"].category = query.data
         if query.data != "others":
-            # Let the user to choose language from English and Chinese
             keyboard = [
                 [InlineKeyboardButton("English", callback_data="english")],
                 [InlineKeyboardButton("Chinese", callback_data="chinese")],
@@ -64,7 +72,7 @@ class AnnouncementBot:
                 f"Please choose a language for your post"
             )
             await query.message.edit_text(message, reply_markup=reply_markup, parse_mode="MarkdownV2")
-            return CATEGORY
+            return LANGUAGE
         else:
             message = f"Please enter the labels of directly chat names you want to post to"
             await query.message.edit_text(message, parse_mode="MarkdownV2")
@@ -72,8 +80,54 @@ class AnnouncementBot:
 
     async def choose_labels(self, update: Update, context: ContextTypes) -> int:
         text = update.message.text
-        labels_or_chat_names = text.split("\n")
-        print(labels_or_chat_names)
+        labels_or_names = text.split("\n")
+        # read all labels and chat name, if any input in label then append to labels, otherwise append to names
+        labels = []
+        names = []
+        existing_labels = self.tools.get_labels()
+        existing_names = self.tools.get_names()
+        for i in labels_or_names:
+            if i in existing_labels:
+                labels.append(i)
+            elif i in existing_names:
+                names.append(i)
+            else:
+                await update.message.reply_text(f"Label or name `{i}` not found, please check again")
+                return LABELS
+
+        context.user_data["announcement"].labels = labels
+        context.user_data["announcement"].names = names
+
+        return CONTENT
+
+    async def choose_language(self, update: Update, context: ContextTypes) -> int:
+        query = update.callback_query
+        print(query.data)
+        context.user_data["announcement"].language = query.data
+
+        message = f"Please enter the content of your post, it can be text, photo or video"
+        await query.message.edit_text(message)
+        return CONTENT
+
+    async def choose_content(self, update: Update, context: ContextTypes) -> int:
+        message = update.message
+        user = update.message.from_user
+
+        keyboard = [
+            [InlineKeyboardButton("Yes", callback_data="yes")],
+            [InlineKeyboardButton("No", callback_data="no")],
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        message = f"Please confirm your post:\n"
+
+        # await context.bot.send_message("-836971986", message, reply_markup=reply_markup)
+        await update.message.reply_text(message, reply_markup=reply_markup)
+
+        return CONFIRMATION
+
+    async def confirmation(self, update: Update, context: ContextTypes) -> int:
+        query = update.callback_query
+        print(query.data)
 
     async def cancel(self, update: Update, context: ContextTypes) -> int:
         operator = update.message.from_user
@@ -92,9 +146,15 @@ class AnnouncementBot:
         post_handler = ConversationHandler(
             entry_points=[CommandHandler("post", self.post)],
             states={
-                POST: [CallbackQueryHandler(self.choose_category, pattern=self.tools.get_category_pattern())],
-                CATEGORY: [CallbackQueryHandler(self.choose_category, pattern="^(english|chinese)$")],
+                CATEGORY: [CallbackQueryHandler(self.choose_category, pattern=self.tools.get_category_pattern())],
+                LANGUAGE: [CallbackQueryHandler(self.choose_language, pattern="^(english|chinese)$")],
                 LABELS: [MessageHandler(filters.Text, self.choose_labels)],
+                CONTENT: [
+                    MessageHandler(
+                        filters.TEXT & (~filters.COMMAND) | filters.PHOTO | filters.VIDEO, self.choose_content
+                    )
+                ],
+                CONFIRMATION: [CallbackQueryHandler(self.confirmation, pattern="^(yes|no)$")],
             },
             fallbacks=[CommandHandler("cancel", self.cancel)],
         )

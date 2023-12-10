@@ -281,6 +281,22 @@ class Tools:
         category.append("others")
         return "|".join(category)
 
+    def get_labels(self):
+        chat_info = self.init_collection("AnnouncementDB", "ChatInfo")
+        chat_info = pd.DataFrame(list(chat_info.find({})))
+
+        labels = chat_info["label"].tolist()
+        concatenated_labels = [label for sublist in labels for label in sublist if label != ""]
+        unique_labels = list(set(concatenated_labels))
+        return unique_labels
+
+    def get_names(self):
+        chat_info = self.init_collection("AnnouncementDB", "ChatInfo")
+        chat_info = pd.DataFrame(list(chat_info.find({})))
+
+        names = chat_info["name"].tolist()
+        return names
+
 
 class TGTestCases:
     @staticmethod
@@ -559,4 +575,28 @@ class Permission:
 
 
 class Announcement:
-    pass
+    def __init__(
+        self,
+        create_time: datetime,
+        creator: str,
+        creator_id: str,
+        category: str = None,
+        language: str = None,
+        labels: list = None,
+        chats: list = None,
+        contents: str = None,
+        approve_time: datetime = None,
+        approver: str = None,
+        approver_id: str = None,
+    ):
+        self.create_time = create_time
+        self.creator = creator
+        self.creator_id = creator_id
+        self.category = category
+        self.language = language
+        self.labels = labels
+        self.chats = chats
+        self.contents = contents
+        self.approve_time = approve_time
+        self.approver = approver
+        self.approver_id = approver_id
