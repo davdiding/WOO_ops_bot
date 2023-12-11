@@ -14,6 +14,7 @@ from telegram.ext import (
 )
 
 CATEGORY, LANGUAGE, LABELS, CONTENT, CONFIRMATION = range(5)
+ANNC_ID, NEW_CONTENT, EDIT_CONFIRMATION = range(3)
 
 
 class AnnouncementBot:
@@ -292,7 +293,21 @@ class AnnouncementBot:
             per_chat=False,
         )
 
+        edit_handler = ConversationHandler(
+            entry_points=[CommandHandler("edit", self.edit)],
+            states={
+                ANNC_ID: [MessageHandler(filters.TEXT, self.edit_annc)],
+                NEW_CONTENT: [
+                    MessageHandler(filters.TEXT & (~filters.COMMAND) | filters.PHOTO | filters.VIDEO, self.edit_content)
+                ],
+                EDIT_CONFIRMATION: [CallbackQueryHandler(self.edit_confirmation, pattern="^(yes|no)$")],
+            },
+            fallbacks=[CommandHandler("cancel", self.cancel)],
+            per_chat=False,
+        )
+
         application.add_handler(post_handler)
+        application.add_handler(edit_handler)
         application.run_polling()
 
 
