@@ -297,9 +297,7 @@ class AnnouncementBot:
             entry_points=[CommandHandler("edit", self.edit)],
             states={
                 ANNC_ID: [MessageHandler(filters.TEXT, self.edit_annc)],
-                NEW_CONTENT: [
-                    MessageHandler(filters.TEXT & (~filters.COMMAND) | filters.PHOTO | filters.VIDEO, self.edit_content)
-                ],
+                NEW_CONTENT: [MessageHandler(filters.TEXT & (~filters.COMMAND), self.edit_content)],
                 EDIT_CONFIRMATION: [CallbackQueryHandler(self.edit_confirmation, pattern="^(yes|no)$")],
             },
             fallbacks=[CommandHandler("cancel", self.cancel)],
