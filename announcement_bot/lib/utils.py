@@ -573,3 +573,24 @@ class Tools:
                 }
             )
         return parsed_result
+
+    def get_help_message(self) -> str:
+        return """
+🤖 **Welcome to the Announcement Bot**\! 🎉
+
+👉 Follow these steps to post your announcement:
+
+1\. **Start**: Type `/post` to begin\.
+2\. **Choose Category**: Tap on your announcement category from the list\.
+    \- If not listed, select `Others`\.
+3\. **Language & Labels**:
+    \- For standard categories, choose a language \(English or Chinese\)\.
+    \- For `Others`, type the labels or chat names, one per line\.
+4\. **Add Content**: Send your announcement text, photo, or video\.
+5\. **Review & Send**: Admin will review your announcement and then post it upon approval\.
+6\. **Cancel**: Type `/cancel` anytime to stop\.
+
+🔒 You need to be whitelisted to use this bot\. If you're not, you'll be notified\.
+
+💡 Any issues or questions? Reach out to our support team for help\!
+        """

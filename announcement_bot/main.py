@@ -260,10 +260,21 @@ class AnnouncementBot:
         await update.message.reply_text(message)
         return ConversationHandler.END
 
+    async def help(self, update: Update, context: ContextTypes) -> None:
+        operator = update.message.from_user
+
+        if self.tools.in_whitelist(operator.id):
+            help_message = self.tools.get_help_message()
+
+            message = f"Hi {operator.full_name},\n{help_message}"
+
+            await update.message.reply_text(message, parse_mode="MarkdownV2")
+
     def run(self) -> None:
         self.logger.info("MainBot is running...")
         application = Application.builder().token(self.tools.config[self.BOT_KEY]).build()
 
+        application.add_handler(CommandHandler("help", self.help))
         post_handler = ConversationHandler(
             entry_points=[CommandHandler("post", self.post)],
             states={
