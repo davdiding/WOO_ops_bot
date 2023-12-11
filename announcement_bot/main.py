@@ -1,7 +1,8 @@
+import argparse
 from datetime import datetime as dt
 
-from lib.utils import Announcement, Tools
-from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
+from lib.utils import Announcement, Tools, init_args
+from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update, request
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -16,15 +17,18 @@ CATEGORY, LANGUAGE, LABELS, CONTENT, CONFIRMATION = range(5)
 
 
 class AnnouncementBot:
+    INFO_BOT_KEY = "INFO_BOT_KEY"
     BOT_KEY = "MAIN_BOT_KEY"
     TEST_BOT_KEY = "TEST_MAIN_BOT_KEY"
     CONFIRMATION_GROUP = "APPROVE_GROUP_ID"
+    REQUEST = request.HTTPXRequest(connection_pool_size=50, connect_timeout=20, read_timeout=20)
 
-    def __init__(self) -> None:
-        self.is_test = False
+    def __init__(self, is_test: bool) -> None:
+        self.is_test = is_test
         self.tools = Tools()
         self.logger = self.tools.get_logger("MainBot")
-        self.bot = Bot(self.tools.config[self.TEST_BOT_KEY if self.is_test else self.BOT_KEY])
+        self.bot = Bot(self.tools.config[self.BOT_KEY], request=self.REQUEST)
+        self.info_bot = Bot(self.tools.config[self.INFO_BOT_KEY], request=self.REQUEST)
 
     async def post(self, update: Update, context: ContextTypes) -> int:
         operator = update.message.from_user
@@ -71,7 +75,8 @@ class AnnouncementBot:
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             message = (
-                f"You have chosen `{self.tools.get_columns_name(query.data, 'cl')}`\n"
+                f"You have chosen \n"
+                f"**Category** : `{self.tools.get_columns_name(query.data, 'cl')}`\n"
                 f"Please choose a language for your post"
             )
             await query.message.edit_text(message, reply_markup=reply_markup, parse_mode="MarkdownV2")
@@ -108,8 +113,14 @@ class AnnouncementBot:
         print(query.data)
         context.user_data["announcement"].language = query.data
 
-        message = f"Please enter the content of your post, it can be text, photo or video"
-        await query.message.edit_text(message)
+        annc = context.user_data["announcement"]
+        message = (
+            f"You have chosen \n"
+            f"**Category** : `{self.tools.get_columns_name(annc.category, 'cl')}`\n"
+            f"**Language** : `{self.tools.get_columns_name(annc.language, 'al')}`\n"
+            f"Please enter the content of your post, in text, photo or video format\n"
+        )
+        await query.message.edit_text(message, parse_mode="MarkdownV2")
         return CONTENT
 
     async def choose_content(self, update: Update, context: ContextTypes) -> int:
@@ -153,14 +164,14 @@ class AnnouncementBot:
         }
 
         keyboard = [
-            [InlineKeyboardButton("Approve", callback_data="approve")],
-            [InlineKeyboardButton("Reject", callback_data="reject")],
+            [InlineKeyboardButton("Approve", callback_data="yes")],
+            [InlineKeyboardButton("Reject", callback_data="no")],
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         if annc_type in ["photo", "video"]:
             inputs = {
-                "chat_id": self.tools.config[self.CONFIRMATION_GROUP],
+                "chat_id": self.tools.config[self.CONFIRMATION_GROUP] if not self.is_test else "5327851721",
                 annc_type: file["id"],
                 "caption": self.tools.get_confirm_message(context.user_data["announcement"]),
                 "parse_mode": "HTML",
@@ -169,7 +180,7 @@ class AnnouncementBot:
 
         else:
             inputs = {
-                "chat_id": self.tools.config[self.CONFIRMATION_GROUP],
+                "chat_id": self.tools.config[self.CONFIRMATION_GROUP] if not self.is_test else "5327851721",
                 "text": self.tools.get_confirm_message(context.user_data["announcement"]),
                 "parse_mode": "HTML",
                 "reply_markup": reply_markup,
@@ -186,21 +197,44 @@ class AnnouncementBot:
                 f"ID: {context.user_data['announcement'].id}"
             )
             await update.message.reply_text(message)
-            return ConversationHandler.END
 
         return CONFIRMATION
 
     async def confirmation(self, update: Update, context: ContextTypes) -> int:
         query = update.callback_query
-
-        operator = query.from_user
+        print(query.data)
+        approver = query.from_user
         annc = context.user_data["announcement"]
 
-        if self.tools.is_admin(operator.id):
-            pass
+        if self.tools.is_admin(approver.id):
+            inputs = {
+                "approver": approver.full_name,
+                "approver_id": approver.id,
+                "approved_time": dt.now(),
+            }
+
+            if query.data == "yes":
+                inputs["status"] = "approved"
+                await self.tools.post_annc(annc, self.info_bot)
+                self.logger.info(f"Announcement {annc.id} sent to chats")
+            else:
+                inputs["status"] = "rejected"
+                self.logger.info(f"Announcement {annc.id} was rejected")
+            annc.update(**inputs)
+
+            repost_message = self.tools.get_report_message(annc)
+
+            await query.message.edit_text(
+                repost_message, parse_mode="HTML"
+            ) if annc.content_type == "text" else await query.message.edit_caption(repost_message, parse_mode="HTML")
+
+            self.logger.info(f"Announcement {annc.id} was {annc.status} by {approver.full_name}({approver.id})")
+
+            announcement_db = self.tools.init_collection("AnnouncementDB", "Announcement")
+            announcement_db.insert_one(annc.__dict__)
 
         else:
-            self.logger.warn(f"Unauthorized user {operator.full_name}({operator.id}) tried to post")
+            self.logger.warn(f"Unauthorized user {approver.full_name}({approver.id}) tried to post")
 
     async def cancel(self, update: Update, context: ContextTypes) -> int:
         operator = update.message.from_user
@@ -212,9 +246,7 @@ class AnnouncementBot:
 
     def run(self) -> None:
         self.logger.info("MainBot is running...")
-        application = (
-            Application.builder().token(self.tools.config[self.TEST_BOT_KEY if self.is_test else self.BOT_KEY]).build()
-        )
+        application = Application.builder().token(self.tools.config[self.BOT_KEY]).build()
 
         post_handler = ConversationHandler(
             entry_points=[CommandHandler("post", self.post)],
@@ -238,5 +270,8 @@ class AnnouncementBot:
 
 
 if __name__ == "__main__":
-    bot = AnnouncementBot()
+    parser = argparse.ArgumentParser("InfoBot")
+    args = init_args(parser)
+
+    bot = AnnouncementBot(is_test=args.test)
     bot.run()

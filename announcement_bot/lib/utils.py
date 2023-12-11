@@ -1,4 +1,5 @@
 import argparse
+import asyncio
 import hashlib
 import json
 import logging
@@ -101,14 +102,15 @@ class Announcement:
         content_html: str = None,
         file_path: str = None,
         available_chats: list = None,
-        approve_time: datetime = None,
+        approved_time: datetime = None,
         approver: str = None,
         approver_id: str = None,
+        status: str = None,
     ):
         self.id = id
         self.create_time = create_time
         self.creator = creator
-        self.creator_id = creator_id
+        self.creator_id = str(creator_id)
         self.category = category
         self.language = language
         self.labels = labels
@@ -118,9 +120,10 @@ class Announcement:
         self.content_type = content_type
         self.file_path = file_path
         self.available_chats = available_chats
-        self.approve_time = approve_time
+        self.approved_time = approved_time
         self.approver = approver
-        self.approver_id = approver_id
+        self.approver_id = str(approver_id)
+        self.status = status
 
     def update(self, **kwargs):
 
@@ -157,7 +160,10 @@ class Tools:
         "new_trading_competition": "New Trading Competition",
         "description": "Note",
     }
-    ANNOUNCEMENT_INFO_COLUMNS_MAP = {}
+    ANNOUNCEMENT_INFO_COLUMNS_MAP = {
+        "english": "English",
+        "chinese": "Chinese",
+    }
 
     CURRENT_PATH = os.path.abspath(os.path.dirname(__file__))
     CONFIG_PATH = os.path.join(CURRENT_PATH, "config.json")
@@ -439,7 +445,7 @@ class Tools:
                 f"<b>ID:</b> {annc.id}\n"
                 f"<b>Creator:</b> {annc.creator}\n"
                 f"<b>Category:</b> {self.get_columns_name(annc.category, 'cl')}\n"
-                f"<b>Language:</b> {annc.language}\n"
+                f"<b>Language:</b> {self.get_columns_name(annc.language, 'al')}\n"
                 f"<b>Chat numbers:</b> {len(annc.available_chats)}\n"
                 f"<b>Contents:</b>\n\n"
                 f"{annc.content_html}"
@@ -458,9 +464,67 @@ class Tools:
 
         return message
 
+    def get_report_message(self, annc: Announcement):
+        if annc.category:
+            message = (
+                f"<b>[{'Approved' if annc.status == 'approved' else 'Rejected'} Message]</b>\n\n"
+                f"<b>ID:</b> {annc.id}\n"
+                f"<b>Creator:</b> {annc.creator}\n"
+                f"<b>Operator:</b> {annc.approver}\n"
+                f"<b>Category:</b> {self.get_columns_name(annc.category, 'cl')}\n"
+                f"<b>Language:</b> {self.get_columns_name(annc.language, 'al')}\n"
+                f"<b>Chat numbers:</b> {len(annc.available_chats)}\n"
+                f"<b>Contents:</b>\n\n"
+                f"{annc.content_html}"
+            )
+        else:
+            message = (
+                f"<b>[{'Approved' if annc.status == 'approved' else 'Rejected'} Message]</b>\n\n"
+                f"<b>ID:</b> {annc.id}\n"
+                f"<b>Creator:</b> {annc.creator}\n"
+                f"<b>Operator:</b> {annc.approver}\n"
+                f"<b>Labels:</b> {', '.join(annc.labels)}\n"
+                f"<b>Chats:</b> {', '.join(annc.chats)}\n"
+                f"<b>Chat numbers:</b> {len(annc.available_chats)}\n"
+                f"<b>Contents:</b>\n\n"
+                f"{annc.content_html}"
+            )
+        return message
+
+    async def post_annc(self, annc: Announcement, bot: Bot):
+        method_map = {
+            "photo": bot.send_photo,
+            "video": bot.send_video,
+            "text": bot.send_message,
+        }
+
+        tasks = []
+        for chat in annc.available_chats:
+            if annc.content_type == "text":
+                inputs = {
+                    "chat_id": chat["id"],
+                    "text": annc.content_html,
+                    "parse_mode": "HTML",
+                }
+                task = asyncio.create_task(method_map[annc.content_type](**inputs))
+            else:
+                inputs = {
+                    "chat_id": chat["id"],
+                    annc.content_type: open(annc.file_path, "rb"),
+                    "caption": annc.content_html,
+                    "parse_mode": "HTML",
+                }
+                task = asyncio.create_task(method_map[annc.content_type](**inputs))
+            tasks.append(task)
+        await asyncio.gather(*tasks)
+
     async def save_file(self, id: str, bot: Bot) -> dict:
         if id == "":
-            return None
+            return {
+                "url": "",
+                "path": "",
+                "id": "",
+            }
 
         info = await bot.get_file(id)
         url = info.file_path
