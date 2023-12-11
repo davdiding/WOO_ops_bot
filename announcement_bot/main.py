@@ -21,7 +21,7 @@ class AnnouncementBot:
     BOT_KEY = "MAIN_BOT_KEY"
     TEST_BOT_KEY = "TEST_MAIN_BOT_KEY"
     CONFIRMATION_GROUP = "APPROVE_GROUP_ID"
-    REQUEST = request.HTTPXRequest(connection_pool_size=50, connect_timeout=20, read_timeout=20)
+    REQUEST = request.HTTPXRequest(connection_pool_size=50000, connect_timeout=300, read_timeout=300)
 
     def __init__(self, is_test: bool) -> None:
         self.is_test = is_test
@@ -82,7 +82,11 @@ class AnnouncementBot:
             await query.message.edit_text(message, reply_markup=reply_markup, parse_mode="MarkdownV2")
             return LANGUAGE
         else:
-            message = f"Please enter the labels of directly chat names you want to post to"
+            message = (
+                f"You have chosen \n"
+                f"**Category** : `{self.tools.get_columns_name(query.data, 'cl')}`\n"
+                f"Please enter the labels or names of the chats you want to post, one per line\n"
+            )
             await query.message.edit_text(message, parse_mode="MarkdownV2")
             return LABELS
 
@@ -104,8 +108,17 @@ class AnnouncementBot:
                 return LABELS
 
         context.user_data["announcement"].labels = labels
-        context.user_data["announcement"].names = names
+        context.user_data["announcement"].chats = names
 
+        annc = context.user_data["announcement"]
+        message = (
+            f"You have chosen \n"
+            f"**Category** : `{self.tools.get_columns_name(annc.category, 'cl')}`\n"
+            f"**Labels** : `{', '.join(annc.labels)}`\n"
+            f"**Chats** : `{', '.join(annc.chats)}`\n"
+            f"Please enter the content of your post, in text, photo or video format\n"
+        )
+        await update.message.reply_text(message, parse_mode="MarkdownV2")
         return CONTENT
 
     async def choose_language(self, update: Update, context: ContextTypes) -> int:
@@ -125,7 +138,7 @@ class AnnouncementBot:
 
     async def choose_content(self, update: Update, context: ContextTypes) -> int:
         message = update.message
-        user = update.message.from_user
+        operator = update.message.from_user
 
         # check content type
         photo = message.photo
@@ -188,15 +201,16 @@ class AnnouncementBot:
 
         await method_map[annc_type](**inputs)
 
-        self.logger.info(f"Announcement {context.user_data['announcement'].id} sent to admin group")
+        self.logger.info(
+            f"Announcement {context.user_data['announcement'].id} ticket sent by {operator.full_name}({operator.id})"
+        )
 
-        if message.chat.type == "private":
-            message = (
-                f"Your post has been sent to the admin group for approval, "
-                f"please wait patiently.\n"
-                f"ID: {context.user_data['announcement'].id}"
-            )
-            await update.message.reply_text(message)
+        message = (
+            f"Your post has been sent to the admin group for approval, "
+            f"please wait patiently.\n"
+            f"ID: {context.user_data['announcement'].id}"
+        )
+        await update.message.reply_text(message)
 
         return CONFIRMATION
 
@@ -215,11 +229,12 @@ class AnnouncementBot:
 
             if query.data == "yes":
                 inputs["status"] = "approved"
-                await self.tools.post_annc(annc, self.info_bot)
-                self.logger.info(f"Announcement {annc.id} sent to chats")
+                result = await self.tools.post_annc(annc, self.info_bot)
+                parsed_result = self.tools.parse_annc_result(result)
+                inputs["record"] = parsed_result
             else:
                 inputs["status"] = "rejected"
-                self.logger.info(f"Announcement {annc.id} was rejected")
+
             annc.update(**inputs)
 
             repost_message = self.tools.get_report_message(annc)
@@ -233,6 +248,7 @@ class AnnouncementBot:
             announcement_db = self.tools.init_collection("AnnouncementDB", "Announcement")
             announcement_db.insert_one(annc.__dict__)
 
+            return ConversationHandler.END
         else:
             self.logger.warn(f"Unauthorized user {approver.full_name}({approver.id}) tried to post")
 
@@ -253,7 +269,7 @@ class AnnouncementBot:
             states={
                 CATEGORY: [CallbackQueryHandler(self.choose_category, pattern=self.tools.get_category_pattern())],
                 LANGUAGE: [CallbackQueryHandler(self.choose_language, pattern="^(english|chinese)$")],
-                LABELS: [MessageHandler(filters.Text, self.choose_labels)],
+                LABELS: [MessageHandler(filters.TEXT, self.choose_labels)],
                 CONTENT: [
                     MessageHandler(
                         filters.TEXT & (~filters.COMMAND) | filters.PHOTO | filters.VIDEO, self.choose_content

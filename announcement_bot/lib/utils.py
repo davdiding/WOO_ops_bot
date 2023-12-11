@@ -105,6 +105,7 @@ class Announcement:
         approved_time: datetime = None,
         approver: str = None,
         approver_id: str = None,
+        record: list = None,
         status: str = None,
     ):
         self.id = id
@@ -123,6 +124,7 @@ class Announcement:
         self.approved_time = approved_time
         self.approver = approver
         self.approver_id = str(approver_id)
+        self.record = record
         self.status = status
 
     def update(self, **kwargs):
@@ -158,6 +160,7 @@ class Tools:
         "dmm_program": "DMM Program",
         "vip_program": "VIP Program",
         "new_trading_competition": "New Trading Competition",
+        "others": "Others",
         "description": "Note",
     }
     ANNOUNCEMENT_INFO_COLUMNS_MAP = {
@@ -179,6 +182,8 @@ class Tools:
         self.gc_client = self.init_gc_client()
         self.permission = self.init_collection("AnnouncementDB", "Permissions")
         self.logger = None
+
+        self.update_columns_map()
 
     def init_config(self) -> dict:
         return json.load(open(self.CONFIG_PATH, "r"))
@@ -228,6 +233,9 @@ class Tools:
                 return ws.worksheet_by_title(name).get_as_df()
         else:
             return ws.worksheet_by_title(name)
+
+    def update_columns_map(self):
+        pass
 
     def get_logger(self, name: str):
         log_path_map = {"InfoBot": self.INFO_BOT_LOG_PATH, "MainBot": self.MAIN_BOT_LOG_PATH}
@@ -414,11 +422,13 @@ class Tools:
         chat_info = self.init_collection("AnnouncementDB", "ChatInfo")
 
         chat_list = []
-        if annc.category:
+        if annc.category != "others":
             filter_ = {annc.category: True, "label": {"$in": [annc.language]}}
             chats = chat_info.find(filter_)
             for chat in chats:
-                chat_list.append({"id": chat["id"], "name": chat["name"]})
+                inputs = {"id": chat["id"], "name": chat["name"]}
+                if inputs not in chat_list:
+                    chat_list.append(inputs)
 
         elif annc.labels or annc.chats:
             for i in annc.labels:
@@ -439,7 +449,8 @@ class Tools:
         return chat_list
 
     def get_confirm_message(self, annc: Announcement) -> str:
-        if annc.category:
+        print(annc.__dict__)
+        if annc.category != "others":
             message = (
                 f"<b>[Confirm Message]</b>\n\n"
                 f"<b>ID:</b> {annc.id}\n"
@@ -465,7 +476,7 @@ class Tools:
         return message
 
     def get_report_message(self, annc: Announcement):
-        if annc.category:
+        if annc.category != "others":
             message = (
                 f"<b>[{'Approved' if annc.status == 'approved' else 'Rejected'} Message]</b>\n\n"
                 f"<b>ID:</b> {annc.id}\n"
@@ -516,7 +527,8 @@ class Tools:
                 }
                 task = asyncio.create_task(method_map[annc.content_type](**inputs))
             tasks.append(task)
-        await asyncio.gather(*tasks)
+        result = await asyncio.gather(*tasks)
+        return result
 
     async def save_file(self, id: str, bot: Bot) -> dict:
         if id == "":
@@ -542,3 +554,22 @@ class Tools:
             "id": id,
         }
         return result
+
+    def parse_annc_result(self, result: list) -> list:
+        parsed_result = []
+        for i in result:
+            chat_type = i.chat.type
+
+            if chat_type == "private":
+                name = i.chat.full_name
+            else:
+                name = i.chat.title
+
+            parsed_result.append(
+                {
+                    "id": i.chat.id,
+                    "name": name,
+                    "message_id": i.message_id,
+                }
+            )
+        return parsed_result
