@@ -13,7 +13,7 @@ from telegram.ext import (
     filters,
 )
 
-CATEGORY, LANGUAGE, LABELS, CONTENT, CONFIRMATION = range(5)
+CATEGORY, LANGUAGE, LABELS, CONTENT = range(4)
 ANNC_ID, NEW_CONTENT, EDIT_CONFIRMATION = range(3)
 
 
@@ -67,7 +67,6 @@ class AnnouncementBot:
 
     async def choose_category(self, update: Update, context: ContextTypes) -> int:
         query = update.callback_query
-        print(query.data)
         context.user_data["announcement"].category = query.data
         if query.data != "others":
             keyboard = [
@@ -105,6 +104,9 @@ class AnnouncementBot:
             elif i in existing_names:
                 names.append(i)
             else:
+                if i in ["/cancel", "/cancel@WOO_Announcement_Request_Bot"]:
+                    await self.cancel(update, context)
+                    return ConversationHandler.END
                 await update.message.reply_text(f"Label or name `{i}` not found, please check again")
                 return LABELS
 
@@ -124,7 +126,6 @@ class AnnouncementBot:
 
     async def choose_language(self, update: Update, context: ContextTypes) -> int:
         query = update.callback_query
-        print(query.data)
         context.user_data["announcement"].language = query.data
 
         annc = context.user_data["announcement"]
@@ -167,6 +168,7 @@ class AnnouncementBot:
             "content_html": content_html,
             "file_path": file["path"],
             "available_chats": self.tools.get_chat_by_announcement(context.user_data["announcement"]),
+            "status": "pending",
         }
 
         context.user_data["announcement"].update(**update_)
@@ -178,8 +180,8 @@ class AnnouncementBot:
         }
 
         keyboard = [
-            [InlineKeyboardButton("Approve", callback_data="yes")],
-            [InlineKeyboardButton("Reject", callback_data="no")],
+            [InlineKeyboardButton("Approve", callback_data=f"approve_{context.user_data['announcement'].id}")],
+            [InlineKeyboardButton("Reject", callback_data=f"reject_{context.user_data['announcement'].id}")],
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -201,10 +203,11 @@ class AnnouncementBot:
             }
 
         await method_map[annc_type](**inputs)
-
         self.logger.info(
             f"Announcement {context.user_data['announcement'].id} ticket sent by {operator.full_name}({operator.id})"
         )
+
+        self.tools.input_annc_record(context.user_data["announcement"])
 
         message = (
             f"Your post has been sent to the admin group for approval, "
@@ -213,13 +216,16 @@ class AnnouncementBot:
         )
         await update.message.reply_text(message)
 
-        return CONFIRMATION
+        return ConversationHandler.END
 
     async def confirmation(self, update: Update, context: ContextTypes) -> int:
         query = update.callback_query
-        print(query.data)
-        approver = query.from_user
-        annc = context.user_data["announcement"]
+
+        operation = query.data.split("_")[0]
+        id = query.data.split("_")[1]
+
+        approver = update.effective_user
+        annc = self.tools.get_annc_by_id(id)
 
         if self.tools.is_admin(approver.id):
             inputs = {
@@ -228,7 +234,7 @@ class AnnouncementBot:
                 "approved_time": dt.now(),
             }
 
-            if query.data == "yes":
+            if operation == "approve":
                 inputs["status"] = "approved"
                 result = await self.tools.post_annc(annc, self.info_bot)
                 parsed_result = self.tools.parse_annc_result(result)
@@ -247,11 +253,26 @@ class AnnouncementBot:
             self.logger.info(f"Announcement {annc.id} was {annc.status} by {approver.full_name}({approver.id})")
 
             announcement_db = self.tools.init_collection("AnnouncementDB", "Announcement")
-            announcement_db.insert_one(annc.__dict__)
+            filter_ = {"id": annc.id}
+            update_ = {"$set": annc.__dict__}
+            announcement_db.update_one(filter_, update_)
 
             return ConversationHandler.END
         else:
             self.logger.warn(f"Unauthorized user {approver.full_name}({approver.id}) tried to post")
+
+    async def edit(self, update: Update, context: ContextTypes) -> int:
+        operator = update.message.from_user
+
+        if not self.tools.in_whitelist(operator.id):
+            await update.message.reply_text(f"Hi {operator.full_name}, You are not in the whitelist")
+            return ConversationHandler.END
+
+        message = f"Hello {operator.full_name}! Please enter the ID of the announcement you want to edit."
+
+        await update.message.reply_text(message)
+
+        return ANNC_ID
 
     async def cancel(self, update: Update, context: ContextTypes) -> int:
         operator = update.message.from_user
@@ -287,13 +308,12 @@ class AnnouncementBot:
                         filters.TEXT & (~filters.COMMAND) | filters.PHOTO | filters.VIDEO, self.choose_content
                     )
                 ],
-                CONFIRMATION: [CallbackQueryHandler(self.confirmation, pattern="^(yes|no)$")],
             },
             fallbacks=[CommandHandler("cancel", self.cancel)],
             per_chat=False,
         )
 
-        edit_handler = ConversationHandler(
+        """edit_handler = ConversationHandler(
             entry_points=[CommandHandler("edit", self.edit)],
             states={
                 ANNC_ID: [MessageHandler(filters.TEXT, self.edit_annc)],
@@ -302,10 +322,11 @@ class AnnouncementBot:
             },
             fallbacks=[CommandHandler("cancel", self.cancel)],
             per_chat=False,
-        )
+        )"""
 
         application.add_handler(post_handler)
-        application.add_handler(edit_handler)
+        application.add_handler(CallbackQueryHandler(self.confirmation, pattern=r"^(approve|reject)_.*"))
+        # application.add_handler(edit_handler)
         application.run_polling()
 
 

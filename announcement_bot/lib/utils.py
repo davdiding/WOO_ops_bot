@@ -1,6 +1,5 @@
 import argparse
 import asyncio
-import hashlib
 import json
 import logging
 import os
@@ -123,7 +122,7 @@ class Announcement:
         self.available_chats = available_chats
         self.approved_time = approved_time
         self.approver = approver
-        self.approver_id = str(approver_id)
+        self.approver_id = str(approver_id) if approver_id else None
         self.record = record
         self.status = status
 
@@ -146,6 +145,12 @@ class Tools:
         "https://docs.google.com/spreadsheets/d/15yR0QEKG6axFxnxvOGYTwztE33yUsVo5xktloTthedE/edit?usp=sharing"
     )
     ONLIN_CHAT_INFO_TABLE_NAME = "Chat Infomation (formal)"
+
+    ONLINE_ANNC_RECORDS_URL = (
+        "https://docs.google.com/spreadsheets/d/1ZWGIQNCvb_6XLiVIguXaWOjLjP90Os2d1ltOwMT4kqs/edit?usp=sharing"
+    )
+    ONLINE_ANNC_RECORDS_TABLE_NAME = "Announcement History (formal)"
+
     CHAT_INFO_COLUMNS_MAP = {
         "name": "Name",
         "type": "Type",
@@ -166,6 +171,21 @@ class Tools:
     ANNOUNCEMENT_INFO_COLUMNS_MAP = {
         "english": "English",
         "chinese": "Chinese",
+        "id": "ID",
+        "create_time": "Create Time",
+        "creator": "Creator",
+        "approver": "Approver",
+        "category": "Category",
+        "language": "Language",
+        "labels": "Labels",
+        "content_text": "Content",
+        "content_type": "Type",
+        "approved_time": "Approved Time",
+        "status": "Status",
+        "expected_number": "Expected Number",
+        "actual_number": "Actual Number",
+        "expected_chats": "Expected Chats",
+        "actual_chats": "Actual Chats",
     }
 
     CURRENT_PATH = os.path.abspath(os.path.dirname(__file__))
@@ -254,9 +274,8 @@ class Tools:
         return self.logger
 
     def get_annc_id(self) -> str:
-        timestamp = str(datetime.now().timestamp() * 1000)
-        signature = hashlib.sha256(timestamp.encode()).hexdigest()
-        return signature
+        timestamp = str(int(datetime.now().timestamp() * 1000))
+        return timestamp
 
     def get_columns_name(self, col: str, input: str) -> str:
         """
@@ -449,7 +468,6 @@ class Tools:
         return chat_list
 
     def get_confirm_message(self, annc: Announcement) -> str:
-        print(annc.__dict__)
         if annc.category != "others":
             message = (
                 f"<b>[Confirm Message]</b>\n\n"
@@ -574,9 +592,82 @@ class Tools:
             )
         return parsed_result
 
+    def input_annc_record(self, annc: Announcement) -> None:
+        annc_records = self.init_collection("AnnouncementDB", "Announcement")
+        annc_records.insert_one(annc.__dict__)
+
+    def get_annc_by_id(self, id: str) -> Announcement:
+        annc_records = self.init_collection("AnnouncementDB", "Announcement")
+        annc = annc_records.find_one({"id": id})
+        del annc["_id"]
+        return Announcement(**annc)
+
+    def update_annc_record(self) -> None:
+        annc_records = self.init_collection("AnnouncementDB", "Announcement")
+        annc_records = pd.DataFrame(list(annc_records.find({})))
+
+        annc_records["expected_number"] = annc_records["available_chats"].apply(
+            lambda x: len(x) if isinstance(x, list) else 0
+        )
+        annc_records["actual_number"] = annc_records["record"].apply(lambda x: len(x) if isinstance(x, list) else 0)
+        annc_records["expected_chats"] = annc_records["available_chats"].apply(
+            lambda x: ", ".join([i["name"] for i in x] if isinstance(x, list) else [])
+        )
+        annc_records["actual_chats"] = annc_records["record"].apply(
+            lambda x: ", ".join([i["name"] for i in x] if isinstance(x, list) else [])
+        )
+        annc_records["labels"] = annc_records["labels"].apply(lambda x: ", ".join(x) if isinstance(x, list) else "")
+        annc_records["language"] = annc_records["language"].apply(
+            lambda x: self.get_columns_name(x, "al") if isinstance(x, str) else ""
+        )
+        annc_records["category"] = annc_records["category"].apply(
+            lambda x: self.get_columns_name(x, "cl") if isinstance(x, str) else ""
+        )
+
+        drop_columns = [
+            "_id",
+            "record",
+            "chats",
+            "available_chats",
+            "creator_id",
+            "approver_id",
+            "content_html",
+            "file_path",
+        ]
+        annc_records = annc_records.drop(columns=drop_columns)[
+            [
+                "id",
+                "status",
+                "create_time",
+                "approved_time",
+                "creator",
+                "approver",
+                "category",
+                "language",
+                "labels",
+                "content_text",
+                "content_type",
+                "expected_number",
+                "actual_number",
+                "expected_chats",
+                "actual_chats",
+            ]
+        ]
+        annc_records.columns = [self.get_columns_name(col, "al") for col in annc_records.columns]
+
+        online_sheet = self.init_online_sheet(
+            self.ONLINE_ANNC_RECORDS_URL, self.ONLINE_ANNC_RECORDS_TABLE_NAME, to_type="ws"
+        )
+        online_sheet.clear()
+        online_sheet.set_dataframe(annc_records, (1, 1))
+        return
+
     def get_help_message(self) -> str:
         return """
 🤖 **Welcome to the Announcement Bot**\! 🎉
+
+[**Chat Information Link**](https://docs.google.com/spreadsheets/d/15yR0QEKG6axFxnxvOGYTwztE33yUsVo5xktloTthedE/edit#gid=761337419)
+[**Anndouncement History Link**](https://docs.google.com/spreadsheets/d/1ZWGIQNCvb_6XLiVIguXaWOjLjP90Os2d1ltOwMT4kqs/edit#gid=1035359090)
 
 👉 Follow these steps to post your announcement:
 
