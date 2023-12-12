@@ -14,7 +14,7 @@ from telegram.ext import (
 )
 
 CATEGORY, LANGUAGE, LABELS, CONTENT = range(4)
-ANNC_ID, NEW_CONTENT, EDIT_CONFIRMATION = range(3)
+ANNC_ID, NEW_CONTENT = range(2)
 
 
 class AnnouncementBot:
@@ -268,11 +268,23 @@ class AnnouncementBot:
             await update.message.reply_text(f"Hi {operator.full_name}, You are not in the whitelist")
             return ConversationHandler.END
 
-        message = f"Hello {operator.full_name}! Please enter the ID of the announcement you want to edit."
+        message = (
+            f"Hello {operator.full_name}! Please enter the ID of the announcement you want to edit. \n"
+            f"Can check the ID in [**Announcement History**](https://docs.google.com/spreadsheets/d/1ZWGIQNCvb_6XLiVIguXaWOjLjP90Os2d1ltOwMT4kqs/edit#gid=1035359090)"
+        )
 
         await update.message.reply_text(message)
 
         return ANNC_ID
+
+    async def choose_annc_id(self, update: Update, context: ContextTypes) -> int:
+        pass
+
+    async def choose_edit_content(self, update: Update, context: ContextTypes) -> int:
+        pass
+
+    async def edit_confirmation(self, update: Update, context: ContextTypes) -> int:
+        pass
 
     async def cancel(self, update: Update, context: ContextTypes) -> int:
         operator = update.message.from_user
@@ -313,20 +325,20 @@ class AnnouncementBot:
             per_chat=False,
         )
 
-        """edit_handler = ConversationHandler(
+        edit_handler = ConversationHandler(
             entry_points=[CommandHandler("edit", self.edit)],
             states={
-                ANNC_ID: [MessageHandler(filters.TEXT, self.edit_annc)],
-                NEW_CONTENT: [MessageHandler(filters.TEXT & (~filters.COMMAND), self.edit_content)],
-                EDIT_CONFIRMATION: [CallbackQueryHandler(self.edit_confirmation, pattern="^(yes|no)$")],
+                ANNC_ID: [MessageHandler(filters.TEXT, self.choose_annc_id)],
+                NEW_CONTENT: [MessageHandler(filters.TEXT & (~filters.COMMAND), self.choose_edit_content)],
             },
             fallbacks=[CommandHandler("cancel", self.cancel)],
             per_chat=False,
-        )"""
+        )
 
         application.add_handler(post_handler)
         application.add_handler(CallbackQueryHandler(self.confirmation, pattern=r"^(approve|reject)_.*"))
-        # application.add_handler(edit_handler)
+        application.add_handler(CallbackQueryHandler(self.edit_confirmation, pattern=r"^(edit_approce|edit_reject)_.*"))
+        application.add_handler(edit_handler)
         application.run_polling()
 
 
