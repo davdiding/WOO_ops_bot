@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -89,6 +90,7 @@ class Announcement:
     def __init__(
         self,
         id: str,
+        operation: str,
         create_time: datetime,
         creator: str,
         creator_id: str,
@@ -108,6 +110,7 @@ class Announcement:
         status: str = None,
     ):
         self.id = id
+        self.operation = operation
         self.create_time = create_time
         self.creator = creator
         self.creator_id = str(creator_id)
@@ -135,6 +138,53 @@ class Announcement:
                 print(f"Unknow param of Announcement: {k}")
 
 
+class EditTicket:
+    FIXED_COLUMNS = ["id", "create_time", "creator", "creator_id"]
+
+    def __init__(
+        self,
+        id: str,
+        operation: str,
+        create_time: datetime,
+        creator: str,
+        creator_id: str,
+        original_id: str = None,
+        content_type: str = None,
+        original_content_text: str = None,
+        original_content_html: str = None,
+        new_content_text: str = None,
+        new_content_html: str = None,
+        available_chats: list = None,
+        approved_time: datetime = None,
+        approver: str = None,
+        approver_id: str = None,
+        status: str = None,
+    ) -> None:
+        self.id = id
+        self.operation = operation
+        self.create_time = create_time
+        self.creator = creator
+        self.creator_id = str(creator_id)
+        self.original_id = original_id
+        self.content_type = content_type
+        self.original_content_text = original_content_text
+        self.original_content_html = original_content_html
+        self.new_content_text = new_content_text
+        self.new_content_html = new_content_html
+        self.available_chats = available_chats
+        self.approved_time = approved_time
+        self.approver = approver
+        self.approver_id = str(approver_id) if approver_id else None
+        self.status = status
+
+    def update(self, **kwargs):
+        for k, v in kwargs.items():
+            if k in self.__dict__ and k not in self.FIXED_COLUMNS:
+                setattr(self, k, v)
+            else:
+                print(f"Unknow param of EditTicket: {k}")
+
+
 class Tools:
     CURRENT_PATH = os.path.abspath(os.path.dirname(__file__))
     MONGO_URL = "MONGO_DB_URL"
@@ -150,6 +200,7 @@ class Tools:
         "https://docs.google.com/spreadsheets/d/1ZWGIQNCvb_6XLiVIguXaWOjLjP90Os2d1ltOwMT4kqs/edit?usp=sharing"
     )
     ONLINE_ANNC_RECORDS_TABLE_NAME = "Announcement History (formal)"
+    ONLINE_EDIT_TICKET_RECORDS_TABLE_NAME = "Edit History (formal)"
 
     CHAT_INFO_COLUMNS_MAP = {
         "name": "Name",
@@ -186,6 +237,17 @@ class Tools:
         "actual_number": "Actual Number",
         "expected_chats": "Expected Chats",
         "actual_chats": "Actual Chats",
+    }
+    EDIT_TICKET_INFO_COLUMNS_MAP = {
+        "id": "ID",
+        "original_id": "Original ID",
+        "create_time": "Create Time",
+        "approved_time": "Approved Time",
+        "creator": "Creator",
+        "approver": "Approver",
+        "original_content_text": "Original Content",
+        "new_content_text": "New Content",
+        "status": "Status",
     }
 
     CURRENT_PATH = os.path.abspath(os.path.dirname(__file__))
@@ -273,9 +335,14 @@ class Tools:
         self.logger = logger
         return self.logger
 
-    def get_annc_id(self) -> str:
+    def get_annc_id(self, if_test: bool) -> str:
         timestamp = str(int(datetime.now().timestamp() * 1000))
-        return timestamp
+        return timestamp if not if_test else f"test-{timestamp}"
+
+    def get_edit_id(self, if_test: bool) -> str:
+        timestamp = str(int(datetime.now().timestamp() * 1000))
+        signature = hashlib.md5(timestamp.encode()).hexdigest()
+        return signature if not if_test else f"test-{signature}"
 
     def get_columns_name(self, col: str, input: str) -> str:
         """
@@ -283,6 +350,7 @@ class Tools:
         param input: 'cl'/'cr'/'al'/'ar',
             'c' means chat,
             'a' means announcement,
+            'e' means edit ticket,
             'l' means input is local name,
             'r' means input is remote name (online sheet)
         """
@@ -304,6 +372,8 @@ class Tools:
             for k, v in self.ANNOUNCEMENT_INFO_COLUMNS_MAP.items():
                 if v == col:
                     return k
+        elif input == "el":
+            return self.EDIT_TICKET_INFO_COLUMNS_MAP[col]
 
     def update_chat_info(self, update_type: str) -> None:
         """
@@ -493,31 +563,65 @@ class Tools:
 
         return message
 
-    def get_report_message(self, annc: Announcement):
-        if annc.category != "others":
+    def get_edit_confirm_message(self, ticket: EditTicket) -> str:
+        message = (
+            f"<b>[Confirm Message]</b>\n\n"
+            f"<b>ID:</b> <code>{ticket.id}</code>\n"
+            f"<b>Annc ID:</b> <code>{ticket.original_id}</code>\n"
+            f"<b>Creator:</b> {ticket.creator}\n"
+            f"<b>Chat numbers:</b> {len(ticket.available_chats)}\n"
+            f"<b>Original Contents:</b>\n\n"
+            f"{ticket.original_content_html}\n\n"
+            f"<b>New Contents:</b>\n\n"
+            f"{ticket.new_content_html}"
+        )
+
+        return message
+
+    def get_report_message(self, annc: any):
+        if isinstance(annc, Announcement):
+            if annc.category != "others":
+                message = (
+                    f"<b>[{'Approved' if annc.status == 'approved' else 'Rejected'} Message]</b>\n\n"
+                    f"<b>Operation:</b> <code>{annc.operation}</code>\n"
+                    f"<b>ID:</b> <code>{annc.id}</code>\n"
+                    f"<b>Creator:</b> {annc.creator}\n"
+                    f"<b>Operator:</b> {annc.approver}\n"
+                    f"<b>Category:</b> <code>{self.get_columns_name(annc.category, 'cl')}</code>\n"
+                    f"<b>Language:</b> <code>{self.get_columns_name(annc.language, 'al')}</code>\n"
+                    f"<b>Chat numbers:</b> {len(annc.available_chats)}\n"
+                    f"<b>Contents:</b>\n\n"
+                    f"{annc.content_html}"
+                )
+            else:
+                message = (
+                    f"<b>[{'Approved' if annc.status == 'approved' else 'Rejected'} Message]</b>\n\n"
+                    f"<b>Operation:</b> <code>{annc.operation}</code>\n"
+                    f"<b>ID:</b> {annc.id}\n"
+                    f"<b>Creator:</b> {annc.creator}\n"
+                    f"<b>Operator:</b> {annc.approver}\n"
+                    f"<b>Labels:</b> {', '.join(annc.labels)}\n"
+                    f"<b>Chats:</b> {', '.join(annc.chats)}\n"
+                    f"<b>Chat numbers:</b> {len(annc.available_chats)}\n"
+                    f"<b>Contents:</b>\n\n"
+                    f"{annc.content_html}"
+                )
+        elif isinstance(annc, EditTicket):
             message = (
                 f"<b>[{'Approved' if annc.status == 'approved' else 'Rejected'} Message]</b>\n\n"
-                f"<b>ID:</b> {annc.id}\n"
+                f"<b>Operation:</b> <code>{annc.operation}</code>\n"
+                f"<b>ID:</b> <code>{annc.id}</code>\n"
+                f"<b>Annc ID:</b> <code>{annc.original_id}</code>\n"
                 f"<b>Creator:</b> {annc.creator}\n"
                 f"<b>Operator:</b> {annc.approver}\n"
-                f"<b>Category:</b> {self.get_columns_name(annc.category, 'cl')}\n"
-                f"<b>Language:</b> {self.get_columns_name(annc.language, 'al')}\n"
                 f"<b>Chat numbers:</b> {len(annc.available_chats)}\n"
-                f"<b>Contents:</b>\n\n"
-                f"{annc.content_html}"
+                f"<b>Original Contents:</b>\n\n"
+                f"{annc.original_content_html}\n\n"
+                f"<b>New Contents:</b>\n\n"
+                f"{annc.new_content_html}"
             )
         else:
-            message = (
-                f"<b>[{'Approved' if annc.status == 'approved' else 'Rejected'} Message]</b>\n\n"
-                f"<b>ID:</b> {annc.id}\n"
-                f"<b>Creator:</b> {annc.creator}\n"
-                f"<b>Operator:</b> {annc.approver}\n"
-                f"<b>Labels:</b> {', '.join(annc.labels)}\n"
-                f"<b>Chats:</b> {', '.join(annc.chats)}\n"
-                f"<b>Chat numbers:</b> {len(annc.available_chats)}\n"
-                f"<b>Contents:</b>\n\n"
-                f"{annc.content_html}"
-            )
+            self.logger.warning(f"Unknow type of annc: {type(annc)}")
         return message
 
     async def post_annc(self, annc: Announcement, bot: Bot):
@@ -526,27 +630,60 @@ class Tools:
             "video": bot.send_video,
             "text": bot.send_message,
         }
+        num_per_batch = 20
+        num_of_batch = len(annc.available_chats) // num_per_batch + 1
+        results = []
+        for i in range(num_of_batch):
+
+            tasks = []
+            for chat in annc.available_chats[i * num_per_batch : (i + 1) * num_per_batch]:
+                if annc.content_type == "text":
+                    inputs = {
+                        "chat_id": chat["id"],
+                        "text": annc.content_html,
+                        "parse_mode": "HTML",
+                    }
+                    task = asyncio.create_task(method_map[annc.content_type](**inputs))
+                else:
+                    inputs = {
+                        "chat_id": chat["id"],
+                        annc.content_type: open(annc.file_path, "rb"),
+                        "caption": annc.content_html,
+                        "parse_mode": "HTML",
+                    }
+                    task = asyncio.create_task(method_map[annc.content_type](**inputs))
+                tasks.append(task)
+            result = await asyncio.gather(*tasks)
+            results.extend(result)
+        return results
+
+    async def edit_annc(self, ticket: EditTicket, bot: Bot):
+        method_map = {
+            "photo": bot.edit_message_caption,
+            "video": bot.edit_message_caption,
+            "text": bot.edit_message_text,
+        }
 
         tasks = []
-        for chat in annc.available_chats:
-            if annc.content_type == "text":
+        for chat in ticket.available_chats:
+            if ticket.content_type == "text":
                 inputs = {
                     "chat_id": chat["id"],
-                    "text": annc.content_html,
+                    "message_id": chat["message_id"],
+                    "text": ticket.new_content_html,
                     "parse_mode": "HTML",
                 }
-                task = asyncio.create_task(method_map[annc.content_type](**inputs))
             else:
                 inputs = {
                     "chat_id": chat["id"],
-                    annc.content_type: open(annc.file_path, "rb"),
-                    "caption": annc.content_html,
+                    "message_id": chat["message_id"],
+                    "caption": ticket.new_content_html,
                     "parse_mode": "HTML",
                 }
-                task = asyncio.create_task(method_map[annc.content_type](**inputs))
+            task = asyncio.create_task(method_map[ticket.content_type](**inputs))
             tasks.append(task)
-        result = await asyncio.gather(*tasks)
-        return result
+
+        await asyncio.gather(*tasks)
 
     async def save_file(self, id: str, bot: Bot) -> dict:
         if id == "":
@@ -596,15 +733,36 @@ class Tools:
         annc_records = self.init_collection("AnnouncementDB", "Announcement")
         annc_records.insert_one(annc.__dict__)
 
-    def get_annc_by_id(self, id: str) -> Announcement:
+    def input_edit_record(self, ticket: EditTicket) -> None:
         annc_records = self.init_collection("AnnouncementDB", "Announcement")
-        annc = annc_records.find_one({"id": id})
-        del annc["_id"]
-        return Announcement(**annc)
+        annc_records.insert_one(ticket.__dict__)
+
+    def get_annc_by_id(self, id: any) -> Announcement:
+        annc_records = self.init_collection("AnnouncementDB", "Announcement")
+        filter_ = {"id": str(id), "operation": "post"}
+        annc = annc_records.find_one(filter_)
+
+        if annc:
+            del annc["_id"]
+            return Announcement(**annc)
+        else:
+            return None
+
+    def get_edit_ticket_by_id(self, id: str) -> EditTicket:
+        annc_records = self.init_collection("AnnouncementDB", "Announcement")
+        filter_ = {"id": id, "operation": "edit"}
+        ticket = annc_records.find_one(filter_)
+
+        if ticket:
+            del ticket["_id"]
+            return EditTicket(**ticket)
+        else:
+            return None
 
     def update_annc_record(self) -> None:
         annc_records = self.init_collection("AnnouncementDB", "Announcement")
-        annc_records = pd.DataFrame(list(annc_records.find({})))
+        filter_ = {"operation": "post", "id": {"$not": {"$regex": "^test"}}}
+        annc_records = pd.DataFrame(list(annc_records.find(filter_)))
 
         annc_records["expected_number"] = annc_records["available_chats"].apply(
             lambda x: len(x) if isinstance(x, list) else 0
@@ -662,12 +820,46 @@ class Tools:
         online_sheet.set_dataframe(annc_records, (1, 1))
         return
 
+    def update_edit_record(self) -> None:
+        annc_records = self.init_collection("AnnouncementDB", "Announcement")
+        filter_ = {"operation": "edit", "id": {"$not": {"$regex": "^test"}}}
+        tickets = pd.DataFrame(list(annc_records.find(filter_)))
+
+        drop_columns = [
+            "_id",
+            "available_chats",
+            "creator_id",
+            "approver_id",
+            "original_content_html",
+            "new_content_html",
+        ]
+        tickets = tickets.drop(columns=drop_columns)[
+            [
+                "id",
+                "status",
+                "create_time",
+                "approved_time",
+                "creator",
+                "approver",
+                "original_id",
+                "original_content_text",
+                "new_content_text",
+            ]
+        ]
+        tickets.columns = [self.get_columns_name(col, "el") for col in tickets.columns]
+
+        online_sheet = self.init_online_sheet(
+            self.ONLINE_ANNC_RECORDS_URL, self.ONLINE_EDIT_TICKET_RECORDS_TABLE_NAME, to_type="ws"
+        )
+        online_sheet.clear()
+        online_sheet.set_dataframe(tickets, (1, 1))
+
     def get_help_message(self) -> str:
         return """
 🤖 **Welcome to the Announcement Bot**\! 🎉
 
 [**Chat Information Link**](https://docs.google.com/spreadsheets/d/15yR0QEKG6axFxnxvOGYTwztE33yUsVo5xktloTthedE/edit#gid=761337419)
-[**Anndouncement History Link**](https://docs.google.com/spreadsheets/d/1ZWGIQNCvb_6XLiVIguXaWOjLjP90Os2d1ltOwMT4kqs/edit#gid=1035359090)
+[**Announcement History Link**](https://docs.google.com/spreadsheets/d/1ZWGIQNCvb_6XLiVIguXaWOjLjP90Os2d1ltOwMT4kqs/edit#gid=1035359090)
 
 👉 Follow these steps to post your announcement:
 

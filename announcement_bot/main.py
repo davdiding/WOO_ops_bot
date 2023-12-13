@@ -1,7 +1,7 @@
 import argparse
 from datetime import datetime as dt
 
-from lib.utils import Announcement, Tools, init_args
+from lib.utils import Announcement, EditTicket, Tools, init_args
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update, request
 from telegram.ext import (
     Application,
@@ -57,7 +57,8 @@ class AnnouncementBot:
         await update.message.reply_text(message, reply_markup=reply_markup)
 
         inputs = {
-            "id": self.tools.get_annc_id(),
+            "id": self.tools.get_annc_id(self.is_test),
+            "operation": "post",
             "create_time": dt.now(),
             "creator": operator.full_name,
             "creator_id": operator.id,
@@ -208,6 +209,7 @@ class AnnouncementBot:
         )
 
         self.tools.input_annc_record(context.user_data["announcement"])
+        self.tools.update_annc_record()
 
         message = (
             f"Your post has been sent to the admin group for approval, "
@@ -257,6 +259,8 @@ class AnnouncementBot:
             update_ = {"$set": annc.__dict__}
             announcement_db.update_one(filter_, update_)
 
+            self.tools.update_annc_record()
+
             return ConversationHandler.END
         else:
             self.logger.warn(f"Unauthorized user {approver.full_name}({approver.id}) tried to post")
@@ -268,30 +272,150 @@ class AnnouncementBot:
             await update.message.reply_text(f"Hi {operator.full_name}, You are not in the whitelist")
             return ConversationHandler.END
 
+        inputs = {
+            "id": self.tools.get_edit_id(self.is_test),
+            "operation": "edit",
+            "create_time": dt.now(),
+            "creator": operator.full_name,
+            "creator_id": operator.id,
+        }
+        context.user_data["edit_ticket"] = EditTicket(**inputs)
+
         message = (
-            f"Hello {operator.full_name}! Please enter the ID of the announcement you want to edit. \n"
+            f"Hello {operator.full_name}\! Please enter the ID of the announcement you want to edit\. \n"
             f"Can check the ID in [**Announcement History**](https://docs.google.com/spreadsheets/d/1ZWGIQNCvb_6XLiVIguXaWOjLjP90Os2d1ltOwMT4kqs/edit#gid=1035359090)"
         )
 
-        await update.message.reply_text(message)
+        await update.message.reply_text(message, parse_mode="MarkdownV2")
 
         return ANNC_ID
 
     async def choose_annc_id(self, update: Update, context: ContextTypes) -> int:
-        pass
+        annc_id = update.message.text
+
+        annc = self.tools.get_annc_by_id(annc_id)
+
+        if annc is None:
+            await update.message.reply_text(f"Announcement {annc_id} not found, please check again")
+            return ANNC_ID
+
+        if annc.status != "approved":
+            await update.message.reply_text(f"Announcement {annc_id} is not approved, please check again")
+            return ANNC_ID
+
+        inputs = {
+            "original_id": annc.id,
+            "available_chats": annc.record,
+            "content_type": annc.content_type,
+            "original_content_text": annc.content_text,
+            "original_content_html": annc.content_html,
+        }
+        context.user_data["edit_ticket"].update(**inputs)
+
+        message = f"Announcement `{annc_id}` found, please enter the new content of your post, in text, photo or video format\n"
+
+        await update.message.reply_text(message, parse_mode="MarkdownV2")
+        return NEW_CONTENT
 
     async def choose_edit_content(self, update: Update, context: ContextTypes) -> int:
-        pass
+        new_content = update.message.text
+        new_content_html = update.message.text_html
+
+        inputs = {
+            "new_content_text": new_content,
+            "new_content_html": new_content_html,
+            "status": "pending",
+        }
+        context.user_data["edit_ticket"].update(**inputs)
+
+        # in approve ticket only show the old text and new text, not the photo or video
+        message = self.tools.get_edit_confirm_message(context.user_data["edit_ticket"])
+
+        keyboard = [
+            [InlineKeyboardButton("Approve", callback_data=f"edit_approve_{context.user_data['edit_ticket'].id}")],
+            [InlineKeyboardButton("Reject", callback_data=f"edit_reject_{context.user_data['edit_ticket'].id}")],
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await self.bot.send_message(
+            chat_id=self.tools.config[self.CONFIRMATION_GROUP] if not self.is_test else "5327851721",
+            text=message,
+            parse_mode="HTML",
+            reply_markup=reply_markup,
+        )
+
+        self.tools.input_edit_record(context.user_data["edit_ticket"])
+        self.tools.update_edit_record()
+
+        self.logger.info(
+            f"Edit ticket {context.user_data['edit_ticket'].id} sent by {update.message.from_user.full_name}({update.message.from_user.id})"
+        )
+
+        message = (
+            f"Your edit ticket has been sent to the admin group for approval, "
+            f"please wait patiently\.\n"
+            f"ID: `{context.user_data['edit_ticket'].id}`"
+        )
+        await update.message.reply_text(message, parse_mode="MarkdownV2")
+        return ConversationHandler.END
 
     async def edit_confirmation(self, update: Update, context: ContextTypes) -> int:
-        pass
+        query = update.callback_query
+        status = "_".join(query.data.split("_")[:2])
+        ticket_id = query.data.split("_")[-1]
+        ticket = self.tools.get_edit_ticket_by_id(ticket_id)
+
+        print(status, ticket_id)
+
+        operator = update.effective_user
+
+        if self.tools.is_admin(operator.id):
+            inputs = {
+                "approver": operator.full_name,
+                "approver_id": operator.id,
+                "approved_time": dt.now(),
+            }
+            if status == "edit_approve":
+                await self.tools.edit_annc(ticket, self.info_bot)
+                inputs["status"] = "approved"
+                ticket.update(**inputs)
+            else:
+                inputs["status"] = "rejected"
+                ticket.update(**inputs)
+
+            self.logger.info(f"Edit ticket {ticket.id} was {ticket.status} by {operator.full_name}({operator.id})")
+
+            repost_message = self.tools.get_report_message(ticket)
+
+            await query.message.edit_text(repost_message, parse_mode="HTML")
+
+            announcement_db = self.tools.init_collection("AnnouncementDB", "Announcement")
+            filter_ = {"id": ticket.id}
+            update_ = {"$set": ticket.__dict__}
+            announcement_db.update_one(filter_, update_)
+            self.tools.update_edit_record()
+
+            annc = self.tools.get_annc_by_id(ticket.original_id)
+            inputs = {
+                "content_text": ticket.new_content_text,
+                "content_html": ticket.new_content_html,
+            }
+            annc.update(**inputs)
+            filter_ = {"id": annc.id}
+            update_ = {"$set": annc.__dict__}
+            announcement_db.update_one(filter_, update_)
+
+            self.tools.update_annc_record()
+
+        else:
+            self.logger.warn(f"Unauthorized user {operator.full_name}({operator.id}) tried to approve editing")
 
     async def cancel(self, update: Update, context: ContextTypes) -> int:
         operator = update.message.from_user
 
         message = f"Bye {operator.full_name}! I hope we can talk again some day."
 
-        await update.message.reply_text(message)
+        await update.message.edit_text(message)
         return ConversationHandler.END
 
     async def help(self, update: Update, context: ContextTypes) -> None:
@@ -337,7 +461,7 @@ class AnnouncementBot:
 
         application.add_handler(post_handler)
         application.add_handler(CallbackQueryHandler(self.confirmation, pattern=r"^(approve|reject)_.*"))
-        application.add_handler(CallbackQueryHandler(self.edit_confirmation, pattern=r"^(edit_approce|edit_reject)_.*"))
+        application.add_handler(CallbackQueryHandler(self.edit_confirmation, pattern=r"^(edit_approve|edit_reject)_.*"))
         application.add_handler(edit_handler)
         application.run_polling()
 
