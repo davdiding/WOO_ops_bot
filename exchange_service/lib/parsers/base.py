@@ -2,6 +2,10 @@ from datetime import datetime
 
 
 class Parser:
+    MULTIPLIER = ["10000", "1000"]
+    FUTURES_TYPE = ["FUTURES", "LinearFutures", "InverseFutures", "NEXT_QUARTER", "CURRENT_QUARTER"]
+    PERPETUAL_TYPE = ["SWAP", "LinearPerpetual", "InversePerpetual", "PERPETUAL"]
+
     def __init__(self) -> None:
         pass
 
@@ -33,3 +37,20 @@ class Parser:
 
     def parse_unified_symbol(self, base: str, quote: str) -> str:
         return f"{base}/{quote}"
+
+    def parse_base_currency(self, base: str) -> str:
+        for i in self.MULTIPLIER:
+            if i in base:
+                return base.replace(i, "")
+        return base
+
+    def parse_multiplier(self, base: str) -> int:
+        for i in self.MULTIPLIER:
+            if i in base:
+                return int(i)
+
+    def parse_is_futures(self, data: str) -> bool:
+        return data in self.FUTURES_TYPE
+
+    def parse_is_perpetual(self, data: str) -> bool:
+        return data in self.PERPETUAL_TYPE

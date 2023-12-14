@@ -27,9 +27,30 @@ class BinanceParser(Parser):
             "raw_data": (lambda x: x),
         }
 
-    @property
-    def futures_exchange_info_parser(self):
-        pass
+    def futures_exchange_info_parser(self, market_type: str):
+        return {
+            "active": (lambda x: (x["status"] if market_type != "inverse" else x["contractStatus"]) == "TRADING"),
+            "is_spot": False,
+            "is_margin": False,
+            "is_futures": (lambda x: self.parse_is_futures(x["contractType"])),
+            "is_perp": (lambda x: self.parse_is_perpetual(x["contractType"])),
+            "is_linear": True if market_type == "linear" else False,
+            "is_inverse": True if market_type == "inverse" else False,
+            "symbol": (lambda x: self.parse_unified_symbol(self.parse_base_currency(x["baseAsset"]), x["quoteAsset"])),
+            "base": (lambda x: self.parse_base_currency(x["baseAsset"])),
+            "quote": (lambda x: x["quoteAsset"]),
+            "settle": (lambda x: x["marginAsset"]),
+            "multiplier": (lambda x: self.parse_multiplier(x["baseAsset"])),
+            "leverage": 1,  # need to find another way to get the leverage data
+            "listing_time": (lambda x: int(x["onboardDate"])),
+            "expiration_time": (lambda x: int(x["deliveryDate"])),
+            "contract_size": (
+                lambda x: 1 if "contractSize" not in x else float(x["contractSize"])
+            ),  # binance only have contract size to inverse perp and futures
+            "tick_size": None,  # not yet implemented
+            "min_order_size": None,  # not yet implemented
+            "max_order_size": None,  # not yet implemented
+        }
 
     def parse_exchange_info(self, response: dict, parser: dict) -> dict:
         datas = response["symbols"]

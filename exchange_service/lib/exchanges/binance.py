@@ -26,7 +26,7 @@ class BaseClient(object):
         return await self._request("POST", url, **kwargs)
 
 
-class Binance(BaseClient):
+class BinanceSpot(BaseClient):
     def __init__(self, api_version: int = 3):
         super().__init__()
         self.base_endpoint = self.BASE_ENDPOINT.format(api_version)
