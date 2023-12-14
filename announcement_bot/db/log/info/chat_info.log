@@ -1,4 +1,17 @@
-2023-12-08 16:39:25,128 - InfoBot - INFO - Add 159 chats to AnnouncementDB.ChatInfo
-2023-12-08 17:00:10,123 - InfoBot - INFO - Add 159 chats to AnnouncementDB.ChatInfo
-2023-12-08 17:37:30,911 - InfoBot - INFO - Add 159 chats to AnnouncementDB.ChatInfo
-2023-12-08 18:15:15,523 - InfoBot - INFO - Download online sheet to mongoDB successfully
+2023-12-11 03:21:02,102 - InfoBot - INFO - InfoBot is running...
+2023-12-11 08:46:50,593 - InfoBot - INFO - InfoBot is running...
+2023-12-11 08:47:09,468 - InfoBot - INFO - Download online sheet to mongoDB successfully
+2023-12-11 08:47:09,470 - InfoBot - WARNING - PPPPPPPPPPPPPP(-4035687768) not in AnnouncementDB.ChatInfo
+2023-12-11 08:47:11,905 - InfoBot - INFO - Upload mongoDB to online sheet successfully
+2023-12-11 08:47:26,971 - InfoBot - INFO - Download online sheet to mongoDB successfully
+2023-12-11 08:47:26,973 - InfoBot - INFO - Add PPPPPPPPPPPPPP(-4035687768) to AnnouncementDB.ChatInfo by David Ding(5327851721)
+2023-12-11 08:47:29,214 - InfoBot - INFO - Upload mongoDB to online sheet successfully
+2023-12-11 08:47:46,608 - InfoBot - INFO - Download online sheet to mongoDB successfully
+2023-12-11 08:47:48,908 - InfoBot - INFO - Upload mongoDB to online sheet successfully
+2023-12-11 08:47:48,908 - InfoBot - INFO - Update PPPPPPPPPPPPPP(-4035687768) to new name: P by David Ding(5327851721)
+2023-12-11 08:48:02,136 - InfoBot - INFO - Download online sheet to mongoDB successfully
+2023-12-11 08:48:02,139 - InfoBot - INFO - Delete P(-4035687768) from AnnouncementDB.ChatInfo by David Ding(5327851721)
+2023-12-11 08:48:04,362 - InfoBot - INFO - Upload mongoDB to online sheet successfully
+2023-12-11 08:51:49,438 - InfoBot - INFO - Download online sheet to mongoDB successfully
+2023-12-11 08:51:51,439 - InfoBot - INFO - Upload mongoDB to online sheet successfully
+2023-12-11 08:51:51,439 - InfoBot - INFO - Update chat info by David Ding(5327851721)
