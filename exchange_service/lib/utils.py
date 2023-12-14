@@ -1,4 +1,8 @@
+import json
+import os
+
 import pandas as pd
+import pymongo as pm
 
 
 def query_dict(dictionary: dict, query: str) -> dict:
@@ -30,3 +34,26 @@ def nested_query_dict(dictionary: dict, key: str, query: str) -> dict:
 
     queried_dict = query_dict(new_dict, query)
     return {key: dictionary[key] for key in queried_dict.keys()}
+
+
+class Tools(object):
+    CURRENT_PATH = os.path.abspath(os.path.dirname(__file__))
+    MONGO_URL = "MONGO_URL"
+
+    CONFIG_PATH = os.path.join(CURRENT_PATH, "config.json")
+
+    def __init__(self) -> None:
+        self.config = self.init_config()
+        self.mongo_client = self.init_mongo_client()
+
+    def init_config(self) -> dict:
+        with open(self.CONFIG_PATH) as f:
+            config = json.load(f)
+            f.close()
+        return config
+
+    def init_mongo_client(self) -> pm.MongoClient:
+        return pm.MongoClient(self.config[self.MONGO_URL])
+
+    def init_collection(self, db: str, name: str) -> pm.collection.Collection:
+        return self.mongo_client[db][name]
