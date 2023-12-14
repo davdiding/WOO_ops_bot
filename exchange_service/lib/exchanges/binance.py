@@ -49,6 +49,12 @@ class BinanceLinear(BaseClient):
     async def _get_exchange_info(self):
         return await self._get(self.linear_base_endpoint + "/fapi/v1/exchangeInfo")
 
+    async def _get_ticker(self, symbol: str):
+        return await self._get(self.linear_base_endpoint + "/fapi/v1/ticker/24hr", params={"symbol": symbol})
+
+    async def _get_tickers(self):
+        return await self._get(self.linear_base_endpoint + "/fapi/v1/ticker/24hr")
+
 
 class BinanceInverse(BaseClient):
     def __init__(self) -> None:
@@ -57,3 +63,9 @@ class BinanceInverse(BaseClient):
 
     async def _get_exchange_info(self):
         return await self._get(self.inverse_base_endpoint + "/dapi/v1/exchangeInfo")
+
+    async def _get_ticker(self, symbol: str):
+        return await self._get(self.inverse_base_endpoint + "/dapi/v1/ticker/24hr", params={"symbol": symbol})
+
+    async def _get_tickers(self):
+        return await self._get(self.inverse_base_endpoint + "/dapi/v1/ticker/24hr")

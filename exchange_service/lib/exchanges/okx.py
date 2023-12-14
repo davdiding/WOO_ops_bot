@@ -23,7 +23,7 @@ class BaseClient(object):
         return await self._request("POST", url, **kwargs)
 
 
-class Okx(BaseClient):
+class OkxUnified(BaseClient):
     def __init__(self):
         super().__init__()
         self.base_endpoint = self.BASE_ENDPOINT

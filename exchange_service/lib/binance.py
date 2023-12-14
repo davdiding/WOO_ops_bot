@@ -34,14 +34,31 @@ class Binance(object):
     async def get_ticker(self, id: str):
         _symbol = self.exchange_info[id]["raw_data"]["symbol"]
 
-        return {id: self.parser.parse_ticker(await self.http._get_ticker(_symbol))}
+        return {id: self.parser.parse_ticker(await self.spot._get_ticker(_symbol))}
 
     async def get_tickers(self):
         results = {}
 
-        datas = self.parser.parse_tickers(await self.http._get_tickers())
-        for i in datas:
-            id = self.parser.get_id_by_symbol(i["symbol"], self.exchange_info)
+        spot = self.parser.parse_tickers(await self.spot._get_tickers(), "spot")
+        id_map = self.parser.get_id_symbol_map(self.exchange_info, "spot")
+        for i in spot:
+            try:
+                id = id_map[i["symbol"]]
+            except KeyError:
+                print(i["symbol"])
+                continue
+            results[id] = i
+
+        linear = self.parser.parse_tickers(await self.linear._get_tickers(), "linear")
+        id_map = self.parser.get_id_symbol_map(self.exchange_info, "linear")
+        for i in linear:
+            id = id_map[i["symbol"]]
+            results[id] = i
+
+        inverse = self.parser.parse_tickers(await self.inverse._get_tickers(), "inverse")
+        id_map = self.parser.get_id_symbol_map(self.exchange_info, "inverse")
+        for i in inverse:
+            id = id_map[i["symbol"]]
             results[id] = i
 
         return results
