@@ -43,11 +43,34 @@ class BinanceParser(Parser):
         return results
 
     def parse_ticker(self, response: dict):
-        return response
+        return {
+            "symbol": response["symbol"],
+            "open_time": int(response["openTime"]),
+            "close_time": int(response["closeTime"]),
+            "open": float(response["openPrice"]),
+            "high": float(response["highPrice"]),
+            "low": float(response["lowPrice"]),
+            "last": float(response["lastPrice"]),
+            "volume": float(response["volume"]),
+            "quote_volume": float(response["quoteVolume"]),
+            "price_change": float(response["priceChange"]),
+            "price_change_percent": float(response["priceChangePercent"]) / 100,
+            "raw_data": response,
+        }
 
     def parse_tickers(self, response: dict):
-
-        return response
+        datas = response
+        results = []
+        for data in datas:
+            result = self.parse_ticker(data)
+            results.append(result)
+        return results
 
     def get_symbol(self, info: dict) -> str:
         return f'{info["base"]}{info["quote"]}'
+
+    def get_id_by_symbol(self, symbol: str, info: dict) -> str:
+        for i in info:
+            if symbol == info[i]["raw_data"]["symbol"]:
+                return i
+        return None

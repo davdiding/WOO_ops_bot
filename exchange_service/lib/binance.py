@@ -24,7 +24,14 @@ class Binance(object):
     async def get_ticker(self, id: str):
         _symbol = self.exchange_info[id]["raw_data"]["symbol"]
 
-        return self.parser.parse_ticker(await self.http._get_ticker(_symbol))
+        return {id: self.parser.parse_ticker(await self.http._get_ticker(_symbol))}
 
     async def get_tickers(self):
-        return self.parser.parse_tickers(await self.http._get_tickers())
+        results = {}
+
+        datas = self.parser.parse_tickers(await self.http._get_tickers())
+        for i in datas:
+            id = self.parser.get_id_by_symbol(i["symbol"], self.exchange_info)
+            results[id] = i
+
+        return results
