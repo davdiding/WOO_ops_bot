@@ -3,6 +3,8 @@ import aiohttp
 
 class BaseClient(object):
     BASE_ENDPOINT = "https://api{}.binance.com"
+    LINEAR_BASE_ENDPOINT = "https://fapi.binance.com"
+    INVERSE_BASE_ENDPOINT = "https://dapi.binance.com"
 
     def __init__(self) -> None:
 
@@ -37,3 +39,21 @@ class Binance(BaseClient):
 
     async def _get_tickers(self):
         return await self._get(self.base_endpoint + "/api/v3/ticker/24hr")
+
+
+class BinanceLinear(BaseClient):
+    def __init__(self) -> None:
+        super().__init__()
+        self.linear_base_endpoint = self.LINEAR_BASE_ENDPOINT
+
+    async def _get_exchange_info(self):
+        return await self._get(self.linear_base_endpoint + "/fapi/v1/exchangeInfo")
+
+
+class BinanceInverse(BaseClient):
+    def __init__(self) -> None:
+        super().__init__()
+        self.inverse_base_endpoint = self.INVERSE_BASE_ENDPOINT
+
+    async def _get_exchange_info(self):
+        return await self._get(self.inverse_base_endpoint + "/dapi/v1/exchangeInfo")
