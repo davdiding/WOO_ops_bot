@@ -40,6 +40,22 @@ class BinanceSpot(BaseClient):
     async def _get_tickers(self):
         return await self._get(self.base_endpoint + "/api/v3/ticker/24hr")
 
+    async def _get_klines(
+        self,
+        symbol: str,
+        interval: str,
+        startTime: int = None,
+        endTime: int = None,
+        limit: int = 500,
+        timeZone: str = "0",
+    ):
+        params = {"symbol": symbol, "interval": interval, "limit": limit, "timeZone": timeZone}
+        if startTime:
+            params["startTime"] = startTime
+        if endTime:
+            params["endTime"] = endTime
+        return await self._get(self.base_endpoint + "/api/v3/klines", params=params)
+
 
 class BinanceLinear(BaseClient):
     def __init__(self) -> None:
@@ -55,6 +71,16 @@ class BinanceLinear(BaseClient):
     async def _get_tickers(self):
         return await self._get(self.linear_base_endpoint + "/fapi/v1/ticker/24hr")
 
+    async def _get_klines(
+        self, symbol: str, interval: str, startTime: int = None, endTime: int = None, limit: int = 500
+    ):
+        params = {"symbol": symbol, "interval": interval, "limit": limit}
+        if startTime:
+            params["startTime"] = startTime
+        if endTime:
+            params["endTime"] = endTime
+        return await self._get(self.linear_base_endpoint + "/fapi/v1/klines", params=params)
+
 
 class BinanceInverse(BaseClient):
     def __init__(self) -> None:
@@ -69,3 +95,13 @@ class BinanceInverse(BaseClient):
 
     async def _get_tickers(self):
         return await self._get(self.inverse_base_endpoint + "/dapi/v1/ticker/24hr")
+
+    async def _get_klines(
+        self, symbol: str, interval: str, startTime: int = None, endTime: int = None, limit: int = 500
+    ):
+        params = {"symbol": symbol, "interval": interval, "limit": limit}
+        if startTime:
+            params["startTime"] = startTime
+        if endTime:
+            params["endTime"] = endTime
+        return await self._get(self.inverse_base_endpoint + "/dapi/v1/klines", params=params)

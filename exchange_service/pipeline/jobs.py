@@ -10,4 +10,5 @@ class BinanceJob(object):
         self.tools = Tools()
 
     async def run(self):
-        pass
+        tickers = await self.binance.get_tickers()
+        return tickers
