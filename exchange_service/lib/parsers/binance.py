@@ -89,9 +89,62 @@ class BinanceParser(Parser):
             results.append(result)
         return results
 
+    def parse_kline(self, response: list, market_type: str) -> dict:
+        """
+        # spot
+        [
+            [
+                1499040000000,      // Kline open time
+                "0.01634790",       // Open price
+                "0.80000000",       // High price
+                "0.01575800",       // Low price
+                "0.01577100",       // Close price
+                "148976.11427815",  // Volume
+                1499644799999,      // Kline Close time
+                "2434.19055334",    // Quote asset volume
+                308,                // Number of trades
+                "1756.87402397",    // Taker buy base asset volume
+                "28.46694368",      // Taker buy quote asset volume
+                "0"                 // Unused field, ignore.
+            ]
+        ]
+
+        # linear
+        # inverse
+        """
+        return {
+            int(response[0]): {
+                "open": float(response[1]),
+                "high": float(response[2]),
+                "low": float(response[3]),
+                "close": float(response[4]),
+                "base_volume": float(response[7]),
+                "quote_volume": float(response[5]),
+                "close_time": int(response[6]),
+                "raw_data": response,
+            }
+        }
+
+    def parse_klines(self, response: list, market_type: str) -> list:
+        results = {}
+        for data in response:
+            result = self.parse_kline(data, market_type)
+            results.update(result)
+        return results
+
     def get_symbol(self, info: dict) -> str:
         return f'{info["base"]}{info["quote"]}'
 
     def get_id_symbol_map(self, info: dict, market_type: str) -> dict:
         info = query_dict(info, f"is_{market_type} == True")
         return {v["raw_data"]["symbol"]: k for k, v in info.items()}
+
+    def get_market_type(self, info: dict):
+        if info["is_spot"]:
+            return "spot"
+        elif info["is_linear"]:
+            return "linear"
+        elif info["is_inverse"]:
+            return "inverse"
+        else:
+            raise Exception("market type not found")
