@@ -415,7 +415,7 @@ class AnnouncementBot:
 
         message = f"Bye {operator.full_name}! I hope we can talk again some day."
 
-        await update.message.edit_text(message)
+        await update.message.reply_text(message)
         return ConversationHandler.END
 
     async def help(self, update: Update, context: ContextTypes) -> None:

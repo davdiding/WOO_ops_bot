@@ -541,10 +541,10 @@ class Tools:
         if annc.category != "others":
             message = (
                 f"<b>[Confirm Message]</b>\n\n"
-                f"<b>ID:</b> {annc.id}\n"
+                f"<b>ID:</b> <code>{annc.id}</code>\n"
                 f"<b>Creator:</b> {annc.creator}\n"
-                f"<b>Category:</b> {self.get_columns_name(annc.category, 'cl')}\n"
-                f"<b>Language:</b> {self.get_columns_name(annc.language, 'al')}\n"
+                f"<b>Category:</b> <code>{self.get_columns_name(annc.category, 'cl')}</code>\n"
+                f"<b>Language:</b> <code>{self.get_columns_name(annc.language, 'al')}</code>\n"
                 f"<b>Chat numbers:</b> {len(annc.available_chats)}\n"
                 f"<b>Contents:</b>\n\n"
                 f"{annc.content_html}"
@@ -552,7 +552,7 @@ class Tools:
         else:
             message = (
                 f"<b>[Confirm Message]</b>\n\n"
-                f"<b>ID:</b> {annc.id}\n"
+                f"<b>ID:</b> <code>{annc.id}</code>\n"
                 f"<b>Creator:</b> {annc.creator}\n"
                 f"<b>Labels:</b> {', '.join(annc.labels)}\n"
                 f"<b>Chats:</b> {', '.join(annc.chats)}\n"
