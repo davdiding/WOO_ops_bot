@@ -74,13 +74,16 @@ class Binance(object):
                 klines = self.parser.parse_klines(
                     await method_map[market_type](_symbol, interval, endTime=query_end, limit=limit), market_type
                 )
+                if not klines:
+                    break
+
                 results.update(klines)
                 query_end = list(klines.keys())[0]
                 if len(klines) < limit or query_end <= start:
                     break
                 continue
 
-            return sort_dict({k: v for k, v in results.items() if end >= k >= start}, ascending=True)
+            return {id: sort_dict({k: v for k, v in results.items() if end >= k >= start}, ascending=True)}
 
         elif num:
             while True:
@@ -96,4 +99,4 @@ class Binance(object):
                 query_end = list(klines.keys())[0]
                 continue
 
-            return sort_dict(results, ascending=True, num=num)
+            return {id: sort_dict(results, ascending=True, num=num)}

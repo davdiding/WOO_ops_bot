@@ -25,6 +25,9 @@ class BaseClient(object):
     async def _post(self, url: str, **kwargs):
         return await self._request("POST", url, **kwargs)
 
+    async def close(self):
+        await self._session.close()
+
 
 class BinanceSpot(BaseClient):
     def __init__(self, api_version: int = 3):

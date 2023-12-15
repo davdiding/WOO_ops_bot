@@ -11,3 +11,5 @@ gc_key.json
 trading_volume_tracker_v2/db/img
 test_main.py
 cases.py
+log/
+announcement_bot/db/files

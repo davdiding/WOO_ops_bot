@@ -102,3 +102,11 @@ class Tools(object):
 
         self.logger = logger
         return self.logger
+
+    @staticmethod
+    def parse_str_to_timestamp(date_str: str, from_format: str = "%Y%m%d") -> int:
+        return int(dt.strptime(date_str, from_format).timestamp() * 1000)
+
+    @staticmethod
+    def parse_timestamp_to_str(timestamp: int, to_format: str = "%Y%m%d") -> str:
+        return dt.fromtimestamp(timestamp / 1000).strftime(to_format)
