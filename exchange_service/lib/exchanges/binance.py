@@ -17,7 +17,7 @@ class BaseClient(object):
         if response.status == 200:
             return await response.json()
         else:
-            raise Exception(f"Error {response.status} {response.reason}")
+            raise Exception(f"Error {response.status} {response.reason} {await response.text()}")
 
     async def _get(self, url: str, **kwargs):
         return await self._request("GET", url, **kwargs)
