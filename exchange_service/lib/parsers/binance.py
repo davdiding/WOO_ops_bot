@@ -73,7 +73,7 @@ class BinanceParser(Parser):
             "open": float(response["openPrice"]),
             "high": float(response["highPrice"]),
             "low": float(response["lowPrice"]),
-            "last": float(response["lastPrice"]),
+            "last_price": float(response["lastPrice"]),
             "base_volume": float(response["volume"] if market_type != "inverse" else response["baseVolume"]),
             "quote_volume": float(response["quoteVolume"] if market_type != "inverse" else response["volume"]),
             "price_change": float(response["priceChange"]),

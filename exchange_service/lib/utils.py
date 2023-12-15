@@ -1,5 +1,7 @@
 import json
+import logging
 import os
+from datetime import datetime as dt
 
 import pandas as pd
 import pymongo as pm
@@ -56,9 +58,14 @@ class Tools(object):
 
     CONFIG_PATH = os.path.join(CURRENT_PATH, "config.json")
 
+    LOG_MAP = {
+        "binance": os.path.join(CURRENT_PATH, "../log/binance/main.log"),
+    }
+
     def __init__(self) -> None:
         self.config = self.init_config()
         self.mongo_client = self.init_mongo_client()
+        self.logger = None
 
     def init_config(self) -> dict:
         with open(self.CONFIG_PATH) as f:
@@ -71,3 +78,27 @@ class Tools(object):
 
     def init_collection(self, db: str, name: str) -> pm.collection.Collection:
         return self.mongo_client[db][name]
+
+    @staticmethod
+    def get_timestap() -> int:
+        return int(dt.now().timestamp() * 1000)
+
+    @staticmethod
+    def get_today() -> int:
+        return int(dt.combine(dt.today(), dt.min.time()).timestamp() * 1000)
+
+    def get_logger(self, name: str) -> logging.Logger:
+
+        logger = logging.getLogger(name)
+
+        formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(filename)s - %(message)s")
+
+        file_handler = logging.FileHandler(self.LOG_MAP[name])
+        file_handler.setFormatter(formatter)
+
+        logger.addHandler(file_handler)
+        logger.setLevel(logging.INFO)
+        logger.propagate = False
+
+        self.logger = logger
+        return self.logger
