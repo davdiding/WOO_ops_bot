@@ -7,10 +7,12 @@ from lib.binance import Binance
 from lib.utils import Tools, query_dict
 from pymongo import UpdateOne
 
+from .exchange_job import ExchangeJob
+
 EXCHANGE = "binance"
 
 
-class TickersJob(object):
+class TickersJob(ExchangeJob):
     NAME = "tickers"
 
     def __init__(self):
@@ -70,7 +72,7 @@ class TickersJob(object):
         self.logger.info(f"Updates {len(results)} tickers of Binance")
 
 
-class KlinesJob(object):
+class KlinesJob(ExchangeJob):
     NAME = "klines"
     UNIQUE_KEY = ["instrument_id", "open_time", "exchange"]
 
@@ -143,12 +145,13 @@ class KlinesJob(object):
         info = query_dict(binance.exchange_info, "active == True")
 
         # get klines
-        batch_size = 20
+        batch_size = 10
         batches = self.create_batch(batch_size, list(info.keys()))
         self.logger.info(
             f"Total batches: {len(batches)}, total instruments: {len([item for sublist in batches for item in sublist])}"
         )
-        for batch in batches:
+        for index, batch in enumerate(batches):
+            print(index)
             tasks = []
             for id in batch:
                 task = asyncio.create_task(binance.get_klines(id, "1d", kwargs["start"], kwargs["end"]))
@@ -170,9 +173,9 @@ class KlinesJob(object):
                 tasks.append(task)
             await asyncio.gather(*tasks)
 
-        binance.spot.close()
-        binance.linear.close()
-        binance.inverse.close()
+        await binance.spot.close()
+        await binance.linear.close()
+        await binance.inverse.close()
         self.logger.info(
             f"Updates klines of Binance. Total batches: {len(batches)}, total instruments: {len([item for sublist in batches for item in sublist])}"
         )
