@@ -55,6 +55,7 @@ class Binance(object):
         return results
 
     async def get_klines(self, id: str, interval: str, start: int = None, end: int = None, num: int = 500):
+        print(id)
         _symbol = self.exchange_info[id]["raw_data"]["symbol"]
         market_type = self.parser.get_market_type(self.exchange_info[id])
         limit = 1000
