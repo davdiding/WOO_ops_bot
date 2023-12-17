@@ -30,7 +30,8 @@ class Parser:
                 f"{self.parse_timestamp_to_str(info['expiration_time'])}"
             )
         else:
-            instrument_id = f"{info['base']}/{info['quote']}:{info['settle']}"
+            multiplier = info["multiplier"] if info["multiplier"] != 1 else ""
+            instrument_id = f"{multiplier}{info['base']}/{info['quote']}:{info['settle']}"
 
         multiplier = info["multiplier"]
         return f"{multiplier if multiplier != 1 and multiplier else ''}{instrument_id}"

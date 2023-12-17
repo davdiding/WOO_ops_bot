@@ -66,9 +66,7 @@ class TickersJob(ExchangeJob):
 
         await self.save(results)
 
-        await binance.spot.close()
-        await binance.linear.close()
-        await binance.inverse.close()
+        await binance.close()
         self.logger.info(f"Updates {len(results)} tickers of Binance")
 
 
@@ -173,9 +171,113 @@ class KlinesJob(ExchangeJob):
                 tasks.append(task)
             await asyncio.gather(*tasks)
 
-        await binance.spot.close()
-        await binance.linear.close()
-        await binance.inverse.close()
+        await binance.close()
         self.logger.info(
             f"Updates klines of Binance. Total batches: {len(batches)}, total instruments: {len([item for sublist in batches for item in sublist])}"
+        )
+
+
+class DcpJob(ExchangeJob):
+    NAME = "dcp"
+    UNIQUE_KEY = ["currency", "timestamp", "exchange"]
+    STABLE_COINS = ["USDT", "BUSD", "USDC", "TUSD", "PAX", "USDS"]
+    IGNORE_COINS = []
+
+    def __init__(self):
+        self.tools = Tools()
+        self.logger = self.tools.get_logger(EXCHANGE)
+
+    def handle_kwargs(self, **kwargs):
+        if kwargs["start"]:
+            start = int(dt.strptime(kwargs["start"], "%Y%m%d").timestamp() * 1000)
+        else:
+            start = int(dt.combine(dt.today() - td(days=7), dt.min.time()).timestamp() * 1000)
+
+        if kwargs["end"]:
+            end = int(dt.strptime(kwargs["end"], "%Y%m%d").timestamp() * 1000)
+        else:
+            end = int(dt.combine(dt.today(), dt.min.time()).timestamp() * 1000)
+
+        return {
+            "start": start,
+            "end": end,
+        }
+
+    async def parse_dcp(self, timestamp: int, currency: str, klines: dict) -> list:
+        sub_klines = klines[(klines["open_time"] == timestamp) & (klines["base"] == currency)]
+        if sub_klines.empty:
+            return {}
+
+        average_close = sub_klines["base_close_price"].mean()
+
+        return {
+            "timestamp": int(timestamp),
+            "exchange": "binance",
+            "currency": currency,
+            "close": float(average_close),
+        }
+
+    async def save(self, datas: list):
+        if not datas:
+            return
+
+        collection = self.tools.init_collection("CexData", "dcp")
+        operations = [
+            UpdateOne(
+                {
+                    "timestamp": data["timestamp"],
+                    "currency": data["currency"],
+                    "exchange": data["exchange"],
+                },
+                {
+                    "$set": data,
+                },
+                upsert=True,
+            )
+            for data in datas
+            if data
+        ]
+        collection.bulk_write(operations)
+
+    async def run(self, **kwargs):
+        kwargs = self.handle_kwargs(**kwargs)
+
+        binance = await Binance().create()
+
+        query_env = {"STABLE_COINS": self.STABLE_COINS, "IGNORE_COINS": self.IGNORE_COINS}
+        infos = query_dict(
+            binance.exchange_info,
+            "active == True and quote in @STABLE_COINS and base not in @STABLE_COINS and base not in @IGNORE_COINS and is_futures == False",
+            query_env,
+        )
+
+        klines_collections = self.tools.init_collection("CexData", "klines")
+
+        filter_ = {
+            "open_time": {"$gte": kwargs["start"], "$lte": kwargs["end"]},
+            "instrument_id": {"$in": list(infos.keys())},
+            "exchange": "binance",
+        }
+
+        klines = klines_collections.find(filter_, {"_id": 0})
+        klines = pd.DataFrame(klines)
+        klines["base"] = klines["instrument_id"].apply(lambda x: infos[x]["base"])
+        klines["multiplier"] = klines["instrument_id"].apply(lambda x: infos[x]["multiplier"])
+        klines["base_close_price"] = klines["close"] / klines["multiplier"]
+        unique_timestamp = klines["open_time"].unique()
+        unique_currency = klines["base"].unique()
+
+        for timestamp in unique_timestamp:
+            print(timestamp)
+            tasks = []
+            for currency in unique_currency:
+                task = asyncio.create_task(self.parse_dcp(timestamp, currency, klines))
+                tasks.append(task)
+            result = await asyncio.gather(*tasks)
+            await self.save(result)
+
+        await binance.close()
+
+        self.logger.info(
+            f"Updates dcp of Binance from {kwargs['start']} to {kwargs['end']}. With {len(unique_timestamp)} timestamps and {len(unique_currency)} currencies."
         )

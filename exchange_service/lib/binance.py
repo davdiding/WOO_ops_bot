@@ -12,6 +12,11 @@ class Binance(object):
 
         self.exchange_info = {}
 
+    async def close(self):
+        await self.spot.close()
+        await self.linear.close()
+        await self.inverse.close()
+
     @classmethod
     async def create(cls):
         instance = cls()

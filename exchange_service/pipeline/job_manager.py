@@ -40,8 +40,8 @@ async def main():
     parser.add_argument("--exchange", type=str, help="Exchange name")
     parser.add_argument("--job", type=str, help="Job name")
 
-    parser.add_argument("--start", type=int, help="Start time", default=None)
-    parser.add_argument("--end", type=int, help="End time", default=None)
+    parser.add_argument("--start", type=str, help="Start time", default=None)
+    parser.add_argument("--end", type=str, help="End time", default=None)
 
     args = parser.parse_args()
 

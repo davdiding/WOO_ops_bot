@@ -7,18 +7,24 @@ import pandas as pd
 import pymongo as pm
 
 
-def query_dict(dictionary: dict, query: str) -> dict:
+def query_dict(dictionary: dict, query: str, query_env: dict = None) -> dict:
     """
     Query a dictionary with a query string
     :param dictionary: dictionary to query
     :param query: query string
+    :param query_env: additional variables for query execution
     :return: queried dictionary
     """
     if not query:
         return dictionary
 
     df = pd.DataFrame(dictionary).T
-    df = df.query(query)
+
+    if query_env:
+        df = df.query(query, local_dict=query_env)
+    else:
+        df = df.query(query)
+
     return df.to_dict(orient="index")
 
 
