@@ -287,6 +287,7 @@ class AnnouncementBot:
             f"Can check the ID in [**Announcement History**](https://docs.google.com/spreadsheets/d/1ZWGIQNCvb_6XLiVIguXaWOjLjP90Os2d1ltOwMT4kqs/edit#gid=1035359090)"
         )
 
+        self.tools.update_annc_record()
         await update.message.reply_text(message, parse_mode="MarkdownV2")
 
         return ANNC_ID
