@@ -258,6 +258,8 @@ class Tools:
     INFO_BOT_LOG_PATH = os.path.join(CURRENT_PATH, "../db/log/info/chat_info.log")
     MAIN_BOT_LOG_PATH = os.path.join(CURRENT_PATH, "../db/log/main/main.log")
 
+    ESCAPE_CHARACTERS = [".", "!", "|"]
+
     def __init__(self):
         self.config = self.init_config()
         self.mongo_client = self.init_mongo_client()
@@ -266,6 +268,12 @@ class Tools:
         self.logger = None
 
         self.update_columns_map()
+
+    # deal escape characters in full name
+    def parse_full_name(self, name: str) -> str:
+        for i in self.ESCAPE_CHARACTERS:
+            name = name.replace(i, f"\{i}")
+        return name
 
     def init_config(self) -> dict:
         return json.load(open(self.CONFIG_PATH, "r"))
@@ -554,8 +562,6 @@ class Tools:
                 f"<b>[Confirm Message]</b>\n\n"
                 f"<b>ID:</b> <code>{annc.id}</code>\n"
                 f"<b>Creator:</b> {annc.creator}\n"
-                f"<b>Labels:</b> {', '.join(annc.labels)}\n"
-                f"<b>Chats:</b> {', '.join(annc.chats)}\n"
                 f"<b>Chat numbers:</b> {len(annc.available_chats)}\n"
                 f"<b>Contents:</b>\n\n"
                 f"{annc.content_html}"
@@ -600,8 +606,6 @@ class Tools:
                     f"<b>ID:</b> {annc.id}\n"
                     f"<b>Creator:</b> {annc.creator}\n"
                     f"<b>Operator:</b> {annc.approver}\n"
-                    f"<b>Labels:</b> {', '.join(annc.labels)}\n"
-                    f"<b>Chats:</b> {', '.join(annc.chats)}\n"
                     f"<b>Chat numbers:</b> {len(annc.available_chats)}\n"
                     f"<b>Contents:</b>\n\n"
                     f"{annc.content_html}"

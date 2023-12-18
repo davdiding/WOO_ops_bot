@@ -267,6 +267,7 @@ class AnnouncementBot:
 
     async def edit(self, update: Update, context: ContextTypes) -> int:
         operator = update.message.from_user
+        operator_full_name = self.tools.parse_full_name(operator.full_name)
 
         if not self.tools.in_whitelist(operator.id):
             await update.message.reply_text(f"Hi {operator.full_name}, You are not in the whitelist")
@@ -282,7 +283,7 @@ class AnnouncementBot:
         context.user_data["edit_ticket"] = EditTicket(**inputs)
 
         message = (
-            f"Hello {operator.full_name}\! Please enter the ID of the announcement you want to edit\. \n"
+            f"Hello {operator_full_name}\! Please enter the ID of the announcement you want to edit\. \n"
             f"Can check the ID in [**Announcement History**](https://docs.google.com/spreadsheets/d/1ZWGIQNCvb_6XLiVIguXaWOjLjP90Os2d1ltOwMT4kqs/edit#gid=1035359090)"
         )
 
@@ -292,6 +293,10 @@ class AnnouncementBot:
 
     async def choose_annc_id(self, update: Update, context: ContextTypes) -> int:
         annc_id = update.message.text
+
+        if annc_id in ["/cancel", "/cancel@WOO_Announcement_Request_Bot"]:
+            await self.cancel(update, context)
+            return ConversationHandler.END
 
         annc = self.tools.get_annc_by_id(annc_id)
 
@@ -420,11 +425,12 @@ class AnnouncementBot:
 
     async def help(self, update: Update, context: ContextTypes) -> None:
         operator = update.message.from_user
+        operator_full_name = self.tools.parse_full_name(operator.full_name)
 
         if self.tools.in_whitelist(operator.id):
             help_message = self.tools.get_help_message()
 
-            message = f"Hi {operator.full_name},\n{help_message}"
+            message = f"Hi {operator_full_name},\n{help_message}"
 
             await update.message.reply_text(message, parse_mode="MarkdownV2")
 
@@ -460,9 +466,10 @@ class AnnouncementBot:
         )
 
         application.add_handler(post_handler)
+        application.add_handler(edit_handler)
         application.add_handler(CallbackQueryHandler(self.confirmation, pattern=r"^(approve|reject)_.*"))
         application.add_handler(CallbackQueryHandler(self.edit_confirmation, pattern=r"^(edit_approve|edit_reject)_.*"))
-        application.add_handler(edit_handler)
+
         application.run_polling()
 
 
