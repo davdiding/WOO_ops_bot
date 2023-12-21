@@ -1,3 +1,6 @@
+from datetime import timedelta as td
+
+from ..utils import query_dict
 from .base import Parser
 
 
@@ -101,3 +104,42 @@ class OkxParser(Parser):
 
                 spots[instrument_id] = spot
         return spots
+
+    def parse_ticker(self, response: any, market_type: str) -> list:
+        if "data" in response:
+            response = response["data"][0]
+
+        if market_type == "spot":
+            base_volume = float(response["vol24h"])
+            quote_volume = float(response["volCcy24h"])
+        else:
+            base_volume = float(response["volCcy24h"])
+            quote_volume = float(response["volCcy24h"]) * (float(response["last"]) + float(response["open24h"])) / 2
+
+        return {
+            "symbol": response["instId"],
+            "open_time": self.adjust_timestamp(int(response["ts"]), td(days=-1)),
+            "close_time": int(response["ts"]),
+            "open": float(response["open24h"]),
+            "high": float(response["high24h"]),
+            "low": float(response["low24h"]),
+            "last_price": float(response["last"]),
+            "base_volume": base_volume,
+            "quote_volume": quote_volume,
+            "price_change": None,
+            "price_change_percent": None,
+            "raw_data": response,
+        }
+
+    def parse_tickers(self, response: dict, market_type: str) -> dict:
+        datas = response["data"]
+
+        results = []
+        for data in datas:
+            result = self.parse_ticker(data, market_type)
+            results.append(result)
+        return results
+
+    def get_id_map(self, info: dict, market_type: str) -> dict:
+        info = query_dict(info, f"is_{market_type} == True")
+        return {v["raw_data"]["instId"]: k for k, v in info.items()}

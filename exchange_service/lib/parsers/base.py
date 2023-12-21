@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 class Parser:
@@ -72,3 +72,7 @@ class Parser:
 
     def parse_is_inverse(self, data: str) -> bool:
         return data in self.INVERSE_TYPES
+
+    @staticmethod
+    def adjust_timestamp(timestamp: int, delta: timedelta) -> int:
+        return int((datetime.fromtimestamp(timestamp / 1000) + delta).timestamp() * 1000)
