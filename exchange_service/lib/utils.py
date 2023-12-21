@@ -66,6 +66,7 @@ class Tools(object):
 
     LOG_MAP = {
         "binance": os.path.join(CURRENT_PATH, "../log/binance/main.log"),
+        "okx": os.path.join(CURRENT_PATH, "../log/okx/main.log"),
     }
 
     def __init__(self) -> None:

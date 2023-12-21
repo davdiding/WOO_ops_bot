@@ -11,6 +11,9 @@ class Okx(object):
         self.parser = OkxParser()
         self.exchange_info = {}
 
+    async def close(self):
+        await self.okx._session.close()
+
     @classmethod
     async def create(cls):
         instance = cls()
