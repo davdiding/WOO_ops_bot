@@ -2,4 +2,102 @@ from .base import Parser
 
 
 class OkxParser(Parser):
-    pass
+    def _parse_leverage(self, lever: any):
+        return int(lever) if lever else 1
+
+    def _parse_symbol(self, data: dict) -> str:
+        market_type = data["instType"]
+        if market_type in ["SPOT", "MARGIN"]:
+            symbol = f"{data['baseCcy']}/{data['quoteCcy']}"
+        elif market_type in ["SWAP", "FUTURES"]:
+            if data["ctType"] == "linear":
+                symbol = f"{data['ctValCcy']}/{data['settleCcy']}"
+            else:
+                symbol = f"{data['settleCcy']}/{data['ctValCcy']}"
+        return symbol
+
+    @property
+    def spot_margin_exchange_info_parser(self):
+        return {
+            "active": (lambda x: x["state"] == "live"),
+            "is_spot": (lambda x: self.parse_is_spot(x["instType"])),
+            "is_margin": (lambda x: self.parse_is_margin(x["instType"])),
+            "is_futures": False,
+            "is_perp": False,
+            "is_linear": True,
+            "is_inverse": False,
+            "symbol": (lambda x: self._parse_symbol(x)),
+            "base": (lambda x: self.parse_base_currency(x["baseCcy"])),
+            "quote": (lambda x: str(x["quoteCcy"])),
+            "settle": (lambda x: str(x["quoteCcy"])),
+            "multiplier": 1,  # spot and margin default multiplier is 1
+            "leverage": (lambda x: self._parse_leverage(x["lever"])),
+            "listing_time": (lambda x: int(x["listTime"])),
+            "expiration_time": None,  # spot not support this field
+            "contract_size": 1,
+            "tick_size": (lambda x: float(x["tickSz"])),
+            "min_order_size": (lambda x: float(x["minSz"])),
+            "max_order_size": (lambda x: float(x["maxMktSz"])),
+            "raw_data": (lambda x: x),
+        }
+
+    @property
+    def futures_perp_exchange_info_parser(self):
+        return {
+            "active": (lambda x: x["state"] == "live"),
+            "is_spot": False,
+            "is_margin": False,
+            "is_futures": (lambda x: self.parse_is_futures(x["instType"])),
+            "is_perp": (lambda x: self.parse_is_perpetual(x["instType"])),
+            "is_linear": (lambda x: self.parse_is_linear(x["ctType"])),
+            "is_inverse": (lambda x: self.parse_is_inverse(x["ctType"])),
+            "symbol": (lambda x: self._parse_symbol(x)),
+            "base": (lambda x: self.parse_base_currency(x["ctValCcy"] if x["ctType"] == "linear" else x["settleCcy"])),
+            "quote": (lambda x: str(x["settleCcy"] if x["ctType"] == "linear" else x["ctValCcy"])),
+            "settle": (lambda x: str(x["settleCcy"])),
+            "multiplier": (lambda x: self.parse_multiplier(x["ctMult"])),
+            "leverage": (lambda x: self._parse_leverage(x["lever"])),
+            "listing_time": (lambda x: int(x["listTime"])),
+            "expiration_time": (lambda x: int(x["expTime"]) if x["expTime"] else None),
+            "contract_size": (
+                lambda x: float(x["ctVal"])
+            ),  # linear will be how many base ccy and inverse will be how many quote ccy
+            "tick_size": (lambda x: float(x["tickSz"])),
+            "min_order_size": (lambda x: float(x["minSz"])),
+            "max_order_size": (lambda x: float(x["maxMktSz"])),
+            "raw_data": (lambda x: x),
+        }
+
+    def parse_exchange_info(self, response: dict, parser: dict) -> dict:
+        datas = response["data"]
+
+        results = {}
+        for data in datas:
+            result = self.get_result_with_parser(data, parser)
+            id = self.parse_unified_id(result)
+            results[id] = result
+        return results
+
+    def combine_spot_margin_exchange_info(self, spots: dict, margins: dict) -> dict:
+        for instrument_id in margins.keys():
+            margin = margins[instrument_id]
+            if instrument_id in spots.keys() and margin["active"]:
+                spot = spots[instrument_id]
+
+                spot["is_margin"] = True
+                spot["leverage"] = margin["leverage"]
+
+                if spot["min_order_size"] != margin["min_order_size"]:
+                    print(f"min_order_size of {instrument_id} is different between spot and margin")
+
+                if spot["max_order_size"] != margin["max_order_size"]:
+                    print(f"max_order_size of {instrument_id} is different between spot and margin")
+
+                if spot["contract_size"] != margin["contract_size"]:
+                    print(f"contract_size of {instrument_id} is different between spot and margin")
+
+                if spot["tick_size"] != margin["tick_size"]:
+                    print(f"tick_size of {instrument_id} is different between spot and margin")
+
+                spots[instrument_id] = spot
+        return spots

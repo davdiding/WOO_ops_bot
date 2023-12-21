@@ -3,8 +3,12 @@ from datetime import datetime
 
 class Parser:
     MULTIPLIER = ["10000", "1000"]
-    FUTURES_TYPE = ["FUTURES", "LinearFutures", "InverseFutures", "NEXT_QUARTER", "CURRENT_QUARTER"]
-    PERPETUAL_TYPE = ["SWAP", "LinearPerpetual", "InversePerpetual", "PERPETUAL"]
+    SPOT_TYPES = ["SPOT"]
+    MARGIN_TYPES = ["MARGIN", "both", "utaOnly", "normalOnly"]
+    FUTURES_TYPES = ["FUTURES", "LinearFutures", "InverseFutures", "NEXT_QUARTER", "CURRENT_QUARTER"]
+    PERPETUAL_TYPES = ["SWAP", "LinearPerpetual", "InversePerpetual", "PERPETUAL"]
+    LINEAR_TYPES = ["LinearFutures", "LinearPerpetual", "linear"]
+    INVERSE_TYPES = ["InverseFutures", "InversePerpetual", "inverse"]
 
     def __init__(self) -> None:
         pass
@@ -49,9 +53,22 @@ class Parser:
         for i in self.MULTIPLIER:
             if i in base:
                 return int(i)
+        return 1
 
     def parse_is_futures(self, data: str) -> bool:
-        return data in self.FUTURES_TYPE
+        return data in self.FUTURES_TYPES
 
     def parse_is_perpetual(self, data: str) -> bool:
-        return data in self.PERPETUAL_TYPE
+        return data in self.PERPETUAL_TYPES
+
+    def parse_is_spot(self, data: str) -> bool:
+        return data in self.SPOT_TYPES
+
+    def parse_is_margin(self, data: str) -> bool:
+        return data in self.MARGIN_TYPES
+
+    def parse_is_linear(self, data: str) -> bool:
+        return data in self.LINEAR_TYPES
+
+    def parse_is_inverse(self, data: str) -> bool:
+        return data in self.INVERSE_TYPES
