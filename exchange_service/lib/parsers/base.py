@@ -1,17 +1,16 @@
 from datetime import datetime, timedelta
 
+from ..utils import query_dict
+
 
 class Parser:
-    MULTIPLIER = ["10000", "1000"]
+    MULTIPLIER = ["1000000", "100000", "10000", "1000"]
     SPOT_TYPES = ["SPOT"]
     MARGIN_TYPES = ["MARGIN", "both", "utaOnly", "normalOnly"]
     FUTURES_TYPES = ["FUTURES", "LinearFutures", "InverseFutures", "NEXT_QUARTER", "CURRENT_QUARTER"]
     PERPETUAL_TYPES = ["SWAP", "LinearPerpetual", "InversePerpetual", "PERPETUAL"]
     LINEAR_TYPES = ["LinearFutures", "LinearPerpetual", "linear"]
     INVERSE_TYPES = ["InverseFutures", "InversePerpetual", "inverse"]
-
-    def __init__(self) -> None:
-        pass
 
     def get_result_with_parser(self, data: dict, parser: dict) -> dict:
         results = {}
@@ -76,3 +75,12 @@ class Parser:
     @staticmethod
     def adjust_timestamp(timestamp: int, delta: timedelta) -> int:
         return int((datetime.fromtimestamp(timestamp / 1000) + delta).timestamp() * 1000)
+
+    @staticmethod
+    def get_id_symbol_map(info: dict, market_type: str, key: str = "symbol") -> dict:
+        if market_type in ["linear", "inverse"]:
+            info = query_dict(info, f"is_{market_type} == True and is_spot == False")
+        else:
+            info = query_dict(info, f"is_{market_type} == True")
+
+        return {v["raw_data"][key]: k for k, v in info.items()}

@@ -1,4 +1,3 @@
-from ..utils import query_dict
 from .base import Parser
 
 
@@ -134,10 +133,6 @@ class BinanceParser(Parser):
 
     def get_symbol(self, info: dict) -> str:
         return f'{info["base"]}{info["quote"]}'
-
-    def get_id_symbol_map(self, info: dict, market_type: str) -> dict:
-        info = query_dict(info, f"is_{market_type} == True")
-        return {v["raw_data"]["symbol"]: k for k, v in info.items()}
 
     def get_market_type(self, info: dict):
         if info["is_spot"]:

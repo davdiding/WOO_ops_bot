@@ -31,6 +31,22 @@ class Bybit(object):
         return {**spot, **linear, **inverse}
 
     async def get_tickers(self) -> dict:
-        spot = self.parser.parse_tickers(await self.bybit._get_tickers("spot"), "spot")
 
-        return {**spot}
+        results = {}
+
+        tickers = ["spot", "linear", "inverse"]
+
+        for market_type in tickers:
+            parsed_tickers = self.parser.parse_tickers(await self.bybit._get_tickers(market_type), market_type)
+            id_map = self.parser.get_id_symbol_map(self.exchange_info, market_type)
+
+            for ticker in parsed_tickers:
+                symbol = ticker["symbol"]
+                if symbol not in id_map:
+                    print(symbol)
+                    continue
+                id = id_map[symbol]
+
+                results[id] = ticker
+
+        return results

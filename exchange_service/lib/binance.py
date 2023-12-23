@@ -55,7 +55,11 @@ class Binance(object):
                 if symbol not in id_map:
                     print(symbol)
                     continue
-                results[id_map[symbol]] = ticker
+                id = id_map[symbol]
+                info = self.exchange_info[id]
+                if info["is_perp"] or info["is_futures"]:
+                    ticker["quote_volume"] *= info["contract_size"]
+                results[id] = ticker
 
         return results
 

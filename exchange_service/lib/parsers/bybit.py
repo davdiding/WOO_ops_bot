@@ -1,3 +1,6 @@
+from datetime import datetime as dt
+from datetime import timedelta as td
+
 from .base import Parser
 
 
@@ -49,6 +52,7 @@ class BybitParser(Parser):
             "tick_size": (lambda x: float(x["priceFilter"]["tickSize"])),
             "min_order_size": (lambda x: float(x["lotSizeFilter"]["minOrderQty"])),
             "max_order_size": (lambda x: float(x["lotSizeFilter"]["maxOrderQty"])),
+            "raw_data": (lambda x: x),
         }
 
     def parse_exchange_info(self, response: dict, parser: dict) -> dict:
@@ -73,14 +77,16 @@ class BybitParser(Parser):
     def parse_ticker(self, response: dict, market_type: str) -> dict:
         return {
             "symbol": response["symbol"],
-            "open_time": None,
-            "close_time": None,
+            "open_time": int((dt.now() - td(days=1)).timestamp() * 1000),
+            "close_time": int(dt.now().timestamp() * 1000),
             "open": float(response["prevPrice24h"]),
             "high": float(response["highPrice24h"]),
             "low": float(response["lowPrice24h"]),
             "last_price": float(response["lastPrice"]),
-            "base_volume": None,
-            "quote_volume": None,
+            "base_volume": float(response["volume24h"]) if market_type != "inverse" else float(response["turnover24h"]),
+            "quote_volume": float(response["turnover24h"])
+            if market_type != "inverse"
+            else float(response["volume24h"]),
             "price_change": float(response["prevPrice24h"]) - float(response["lastPrice"]),
             "price_change_percent": float(response["price24hPcnt"]),
             "raw_data": response,

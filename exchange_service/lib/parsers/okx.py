@@ -1,6 +1,5 @@
 from datetime import timedelta as td
 
-from ..utils import query_dict
 from .base import Parser
 
 
@@ -139,7 +138,3 @@ class OkxParser(Parser):
             result = self.parse_ticker(data, market_type)
             results.append(result)
         return results
-
-    def get_id_map(self, info: dict, market_type: str) -> dict:
-        info = query_dict(info, f"is_{market_type} == True")
-        return {v["raw_data"]["instId"]: k for k, v in info.items()}

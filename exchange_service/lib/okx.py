@@ -57,7 +57,7 @@ class Okx(object):
             if market_type != market_type:
                 continue
             parsed_tickers = self.parser.parse_tickers(await self.okx._get_tickers(_market_type), market_type)
-            id_map = self.parser.get_id_map(self.exchange_info, market_type)
+            id_map = self.parser.get_id_symbol_map(self.exchange_info, market_type, "instId")
 
             for ticker in parsed_tickers:
                 symbol = ticker["symbol"]
