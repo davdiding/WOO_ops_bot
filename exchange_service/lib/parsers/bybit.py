@@ -34,7 +34,7 @@ class BybitParser(Parser):
             "is_spot": False,
             "is_margin": False,
             "is_futures": (lambda x: self.parse_is_futures(x["contractType"])),
-            "is_perp": (lambda x: self.parse_is_perp(x["contractType"])),
+            "is_perp": (lambda x: self.parse_is_perpetual(x["contractType"])),
             "is_linear": (lambda x: self.parse_is_linear(x["contractType"])),
             "is_inverse": (lambda x: self.parse_is_inverse(x["contractType"])),
             "symbol": (lambda x: self.parse_unified_symbol(self.parse_base_currency(x["baseCoin"]), x["quoteCoin"])),
@@ -60,3 +60,28 @@ class BybitParser(Parser):
             id = self.parse_unified_id(result)
             results[id] = result
         return results
+
+    def parse_tickers(self, response: dict, market_type: str) -> list:
+        datas = response["result"]["list"]
+
+        results = []
+        for data in datas:
+            result = self.parse_ticker(data, market_type)
+            results.append(result)
+        return results
+
+    def parse_ticker(self, response: dict, market_type: str) -> dict:
+        return {
+            "symbol": response["symbol"],
+            "open_time": None,
+            "close_time": None,
+            "open": float(response["prevPrice24h"]),
+            "high": float(response["highPrice24h"]),
+            "low": float(response["lowPrice24h"]),
+            "last_price": float(response["lastPrice"]),
+            "base_volume": None,
+            "quote_volume": None,
+            "price_change": float(response["prevPrice24h"]) - float(response["lastPrice"]),
+            "price_change_percent": float(response["price24hPcnt"]),
+            "raw_data": response,
+        }

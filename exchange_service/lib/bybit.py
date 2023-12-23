@@ -22,10 +22,15 @@ class Bybit(object):
             await self.bybit._get_exchange_info("spot"), self.parser.spot_exchange_info_parser
         )
         linear = self.parser.parse_exchange_info(
-            await self.bybit._get_exchange_info("linear"), self.parser.futures_perp_exchange_info_parser
+            await self.bybit._get_exchange_info("linear"), self.parser.perp_futures_exchange_info_parser
         )
         inverse = self.parser.parse_exchange_info(
-            await self.bybit._get_exchange_info("inverse"), self.parser.futures_perp_exchange_info_parser
+            await self.bybit._get_exchange_info("inverse"), self.parser.perp_futures_exchange_info_parser
         )
 
         return {**spot, **linear, **inverse}
+
+    async def get_tickers(self) -> dict:
+        spot = self.parser.parse_tickers(await self.bybit._get_tickers("spot"), "spot")
+
+        return {**spot}
