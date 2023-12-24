@@ -22,10 +22,7 @@ class TickersJob(ExchangeJob):
     async def parse_tickers(self, tickers: dict, exchange_info: dict) -> list:
         results = []
         for id in tickers:
-            info = exchange_info[id]
             ticker = tickers[id]
-            if info["is_inverse"]:
-                ticker["quote_volume"] *= info["contract_size"]
             if ticker["base_volume"] == 0:
                 continue
 
