@@ -10,6 +10,7 @@ import pandas as pd
 import pygsheets as pg
 import pymongo as pm
 import requests as rq
+from beautifultable import BeautifulTable
 from telegram import Bot, Update
 
 
@@ -139,7 +140,7 @@ class Announcement:
 
 
 class EditTicket:
-    FIXED_COLUMNS = ["id", "create_time", "creator", "creator_id"]
+    FIXED_VALUES = ["id", "create_time", "creator", "creator_id"]
 
     def __init__(
         self,
@@ -179,10 +180,53 @@ class EditTicket:
 
     def update(self, **kwargs):
         for k, v in kwargs.items():
-            if k in self.__dict__ and k not in self.FIXED_COLUMNS:
+            if k in self.__dict__ and k not in self.FIXED_VALUES:
                 setattr(self, k, v)
             else:
                 print(f"Unknow param of EditTicket: {k}")
+
+
+class DeleteTicket:
+    FIXED_VALUES = ["id", "create_time", "creator", "creator_id"]
+
+    def __init__(
+        self,
+        id: str,
+        operation: str,
+        create_time: datetime,
+        creator: str,
+        creator_id: str,
+        original_id: str = None,
+        content_type: str = None,
+        original_content_text: str = None,
+        original_content_html: str = None,
+        available_chats: list = None,
+        approved_time: datetime = None,
+        approver: str = None,
+        approver_id: str = None,
+        status: str = None,
+    ) -> None:
+        self.id = id
+        self.operation = operation
+        self.create_time = create_time
+        self.creator = creator
+        self.creator_id = str(creator_id)
+        self.original_id = original_id
+        self.content_type = content_type
+        self.original_content_text = original_content_text
+        self.original_content_html = original_content_html
+        self.available_chats = available_chats
+        self.approved_time = approved_time
+        self.approver = approver
+        self.approver_id = str(approver_id) if approver_id else None
+        self.status = status
+
+    def update(self, **kwargs):
+        for k, v in kwargs.items():
+            if k in self.__dict__ and k not in self.FIXED_VALUES:
+                setattr(self, k, v)
+            else:
+                print(f"Unknow param of DeleteTicket: {k}")
 
 
 class Tools:
@@ -881,3 +925,17 @@ class Tools:
 
 💡 Any issues or questions? Reach out to our support team for help\!
         """
+
+    def get_bt_from_df(self, df: pd.DataFrame) -> str:
+        table = BeautifulTable()
+        table.set_style(BeautifulTable.STYLE_BOX)
+        table.columns.header = df.columns.tolist()
+        for _, row in df.iterrows():
+            table.rows.append(row.tolist())
+        return f"<pre>{table}</pre>"
+
+    def get_permission_table(self) -> str:
+        permission = self.init_collection("AnnouncementDB", "Permissions")
+        permission = pd.DataFrame(list(permission.find({}))).drop(columns=["_id", "id", "update_time"], axis=1)
+
+        return self.get_bt_from_df(permission)

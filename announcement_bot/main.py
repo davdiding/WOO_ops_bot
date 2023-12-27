@@ -401,15 +401,17 @@ class AnnouncementBot:
             announcement_db.update_one(filter_, update_)
             self.tools.update_edit_record()
 
-            annc = self.tools.get_annc_by_id(ticket.original_id)
-            inputs = {
-                "content_text": ticket.new_content_text,
-                "content_html": ticket.new_content_html,
-            }
-            annc.update(**inputs)
-            filter_ = {"id": annc.id}
-            update_ = {"$set": annc.__dict__}
-            announcement_db.update_one(filter_, update_)
+            # only update original annc if approved
+            if status == "edit_approve":
+                annc = self.tools.get_annc_by_id(ticket.original_id)
+                inputs = {
+                    "content_text": ticket.new_content_text,
+                    "content_html": ticket.new_content_html,
+                }
+                annc.update(**inputs)
+                filter_ = {"id": annc.id}
+                update_ = {"$set": annc.__dict__}
+                announcement_db.update_one(filter_, update_)
 
             self.tools.update_annc_record()
 
@@ -423,7 +425,6 @@ class AnnouncementBot:
         if not self.tools.in_whitelist(operator.id):
             await update.message.reply_text(f"Hi {operator.full_name}, You are not in the whitelist")
             return ConversationHandler.END
-
         print(operator_full_name)
 
     async def choose_delete_id(self, update: Update, context: ContextTypes) -> ConversationHandler.END:
@@ -431,6 +432,22 @@ class AnnouncementBot:
 
     async def delete_confirmation(self, update: Update, context: ContextTypes) -> ConversationHandler.END:
         pass
+
+    async def check_permission(self, update: Update, context: ContextTypes) -> ConversationHandler.END:
+        operator = update.message.from_user
+
+        if not self.tools.is_admin(operator.id):
+            await update.message.reply_text(f"Hi {operator.full_name}, You are not an admin, cann't check permission.")
+            return ConversationHandler.END
+
+        table = self.tools.get_permission_table()
+
+        message = f"""
+        Here is the permission table:\n
+        {table}"""
+        await update.message.reply_text(message, parse_mode="HTML")
+
+        return ConversationHandler.END
 
     async def cancel(self, update: Update, context: ContextTypes) -> int:
         operator = update.message.from_user
@@ -499,6 +516,7 @@ class AnnouncementBot:
         application.add_handler(
             CallbackQueryHandler(self.delete_confirmation, pattern=r"^(delete_approve|delete_reject)_.*")
         )
+        application.add_handler(CommandHandler("check_permission", self.check_permission))
 
         application.run_polling()
 
