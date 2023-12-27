@@ -12,7 +12,7 @@ class Okx(object):
         self.exchange_info = {}
 
     async def close(self):
-        await self.okx._session.close()
+        await self.okx.close()
 
     @classmethod
     async def create(cls):
