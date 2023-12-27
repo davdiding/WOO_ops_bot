@@ -9,7 +9,7 @@ class Bybit(object):
         self.exchange_info = {}
 
     async def close(self):
-        await self.bybit._session.close()
+        await self.bybit.close()
 
     @classmethod
     async def create(cls):

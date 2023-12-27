@@ -19,3 +19,6 @@ class BaseClient(object):
 
     async def _post(self, url: str, **kwargs):
         return await self._request("POST", url, **kwargs)
+
+    async def close(self):
+        await self._session.close()
