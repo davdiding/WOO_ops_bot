@@ -139,7 +139,7 @@ class AnnouncementBot:
         await query.message.edit_text(message, parse_mode="MarkdownV2")
         return CONTENT
 
-    async def choose_content(self, update: Update, context: ContextTypes) -> int:
+    async def choose_content(self, update: Update, context: ContextTypes) -> ConversationHandler.END:
         message = update.message
         operator = update.message.from_user
 
@@ -220,7 +220,7 @@ class AnnouncementBot:
 
         return ConversationHandler.END
 
-    async def confirmation(self, update: Update, context: ContextTypes) -> int:
+    async def confirmation(self, update: Update, context: ContextTypes) -> ConversationHandler.END:
         query = update.callback_query
 
         operation = query.data.split("_")[0]
@@ -323,7 +323,7 @@ class AnnouncementBot:
         await update.message.reply_text(message, parse_mode="MarkdownV2")
         return NEW_CONTENT
 
-    async def choose_edit_content(self, update: Update, context: ContextTypes) -> int:
+    async def choose_edit_content(self, update: Update, context: ContextTypes) -> ConversationHandler.END:
         new_content = update.message.text
         new_content_html = update.message.text_html
 
@@ -365,7 +365,7 @@ class AnnouncementBot:
         await update.message.reply_text(message, parse_mode="MarkdownV2")
         return ConversationHandler.END
 
-    async def edit_confirmation(self, update: Update, context: ContextTypes) -> int:
+    async def edit_confirmation(self, update: Update, context: ContextTypes) -> ConversationHandler.END:
         query = update.callback_query
         status = "_".join(query.data.split("_")[:2])
         ticket_id = query.data.split("_")[-1]
@@ -415,6 +415,22 @@ class AnnouncementBot:
 
         else:
             self.logger.warn(f"Unauthorized user {operator.full_name}({operator.id}) tried to approve editing")
+
+    async def delete(self, update: Update, context: ContextTypes) -> int:
+        operator = update.message.from_user
+        operator_full_name = self.tools.parse_full_name(operator.full_name)
+
+        if not self.tools.in_whitelist(operator.id):
+            await update.message.reply_text(f"Hi {operator.full_name}, You are not in the whitelist")
+            return ConversationHandler.END
+
+        print(operator_full_name)
+
+    async def choose_delete_id(self, update: Update, context: ContextTypes) -> ConversationHandler.END:
+        pass
+
+    async def delete_confirmation(self, update: Update, context: ContextTypes) -> ConversationHandler.END:
+        pass
 
     async def cancel(self, update: Update, context: ContextTypes) -> int:
         operator = update.message.from_user
@@ -466,10 +482,23 @@ class AnnouncementBot:
             per_chat=False,
         )
 
+        delete_handler = ConversationHandler(
+            entry_points=[CommandHandler("delete", self.delete)],
+            states={
+                ANNC_ID: [MessageHandler(filters.TEXT, self.choose_delete_id)],
+            },
+            fallbacks=[CommandHandler("cancel", self.cancel)],
+            per_chat=False,
+        )
+
         application.add_handler(post_handler)
         application.add_handler(edit_handler)
+        application.add_handler(delete_handler)
         application.add_handler(CallbackQueryHandler(self.confirmation, pattern=r"^(approve|reject)_.*"))
         application.add_handler(CallbackQueryHandler(self.edit_confirmation, pattern=r"^(edit_approve|edit_reject)_.*"))
+        application.add_handler(
+            CallbackQueryHandler(self.delete_confirmation, pattern=r"^(delete_approve|delete_reject)_.*")
+        )
 
         application.run_polling()
 
