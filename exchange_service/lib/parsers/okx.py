@@ -4,6 +4,25 @@ from .base import Parser
 
 
 class OkxParser(Parser):
+    interval_map = {
+        "1m": "1m",
+        "3m": "3m",
+        "5m": "5m",
+        "15m": "15m",
+        "30m": "30m",
+        "1h": "1H",
+        "2h": "2H",
+        "4h": "4H",
+        "6h": "6H",
+        "12h": "12H",
+        "1d": "1D",
+        "2d": "2D",
+        "3d": "3D",
+        "1w": "1W",
+        "1M": "1M",
+        "3M": "3M",
+    }
+
     def _parse_leverage(self, lever: any):
         return int(lever) if lever else 1
 
@@ -138,3 +157,28 @@ class OkxParser(Parser):
             result = self.parse_ticker(data, market_type)
             results.append(result)
         return results
+
+    @staticmethod
+    def parse_kline(response: dict, market_type: str) -> dict:
+        return {
+            "open": float(response[1]),
+            "high": float(response[2]),
+            "low": float(response[3]),
+            "close": float(response[4]),
+            "base_volume": float(response[6] if market_type != "spot" else response[5]),
+            "quote_volume": float(response[7]),
+            "raw_data": response,
+        }
+
+    def parse_klines(self, response: dict, market_type: str) -> dict:
+        datas = response["data"]
+
+        results = {}
+        for data in datas:
+            result = self.parse_kline(data, market_type)
+            timestamp = int(data[0])
+            results[timestamp] = result
+        return results
+
+    def get_interval(self, interval: str) -> str:
+        return self.interval_map[interval]

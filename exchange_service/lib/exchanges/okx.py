@@ -6,13 +6,22 @@ class OkxUnified(BaseClient):
 
     def __init__(self):
         super().__init__()
-        self.base_endpoint = self.BASE_ENDPOINT
 
     async def _get_exchange_info(self, instType: str) -> dict:
-        return await self._get(self.base_endpoint + "/api/v5/public/instruments", params={"instType": instType})
+        return await self._get(self.BASE_ENDPOINT + "/api/v5/public/instruments", params={"instType": instType})
 
     async def _get_tickers(self, instType: str):
-        return await self._get(self.base_endpoint + "/api/v5/market/tickers", params={"instType": instType})
+        return await self._get(self.BASE_ENDPOINT + "/api/v5/market/tickers", params={"instType": instType})
 
     async def _get_ticker(self, instId: str):
-        return await self._get(self.base_endpoint + "/api/v5/market/ticker", params={"instId": instId})
+        return await self._get(self.BASE_ENDPOINT + "/api/v5/market/ticker", params={"instId": instId})
+
+    async def _get_klines(self, instId: str, bar: str, after: int = None, before: int = None, limit: int = None):
+        params = {"instId": instId, "bar": bar}
+        if after:
+            params["after"] = after
+        if before:
+            params["before"] = before
+        if limit:
+            params["limit"] = limit
+        return await self._get(self.BASE_ENDPOINT + "/api/v5/market/candles", params=params)
