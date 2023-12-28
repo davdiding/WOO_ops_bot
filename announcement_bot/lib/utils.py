@@ -485,7 +485,10 @@ class Tools:
             chat_info["label"] = chat_info["label"].apply(lambda x: ",".join(x))
             chat_info = chat_info.replace({False: "x", True: ""})
             chat_info.columns = [self.get_columns_name(col, "cl") for col in chat_info.columns]
-            chat_info = chat_info[list(self.CHAT_INFO_COLUMNS_MAP.values())]
+
+            online_columns = list(self.CHAT_INFO_COLUMNS_MAP.values())
+            online_columns.remove("Others")
+            chat_info = chat_info[online_columns]
 
             original_labels_order = online_chat_info["Labels"].unique().tolist()
 
