@@ -774,6 +774,7 @@ class Tools:
                         "id": i["chat_id"],
                         "name": i["chat_id"],
                         "message_id": "Failed",
+                        "error_message": i["error_message"],
                     }
                 )
                 continue
