@@ -672,6 +672,13 @@ class Tools:
             self.logger.warning(f"Unknow type of annc: {type(annc)}")
         return message
 
+    async def post(self, method: callable, inputs: dict):
+        try:
+            return await method(**inputs)
+        except Exception as e:
+            self.logger.warning(f"Post message failed sending to {inputs['chat_id']}: {e}")
+            return {"status": "failed", "chat_id": inputs["chat_id"], "error_message": f"{e}"}
+
     async def post_annc(self, annc: Announcement, bot: Bot):
         method_map = {
             "photo": bot.send_photo,
@@ -691,7 +698,7 @@ class Tools:
                         "text": annc.content_html,
                         "parse_mode": "HTML",
                     }
-                    task = asyncio.create_task(method_map[annc.content_type](**inputs))
+                    task = asyncio.create_task(self.post(method_map[annc.content_type], inputs))
                 else:
                     inputs = {
                         "chat_id": chat["id"],
@@ -699,7 +706,7 @@ class Tools:
                         "caption": annc.content_html,
                         "parse_mode": "HTML",
                     }
-                    task = asyncio.create_task(method_map[annc.content_type](**inputs))
+                    task = asyncio.create_task(self.post(method_map[annc.content_type], inputs))
                 tasks.append(task)
             result = await asyncio.gather(*tasks)
             results.extend(result)
@@ -761,6 +768,16 @@ class Tools:
     def parse_annc_result(self, result: list) -> list:
         parsed_result = []
         for i in result:
+            if type(i) is dict:
+                parsed_result.append(
+                    {
+                        "id": i["chat_id"],
+                        "name": i["chat_id"],
+                        "message_id": "Failed",
+                    }
+                )
+                continue
+
             chat_type = i.chat.type
 
             if chat_type == "private":
