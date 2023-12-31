@@ -10,9 +10,6 @@ class Okx(OkxParser, OkxUnified):
         super().__init__()
         self.exchange_info = {}
 
-    async def close(self):
-        await self.okx.close()
-
     @classmethod
     async def create(cls):
         instance = cls()
