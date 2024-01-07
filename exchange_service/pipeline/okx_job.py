@@ -59,3 +59,29 @@ class TickersJob(ExchangeJob):
 
         await okx.close()
         self.logger.info(f"Updates {len(results)} tickers of OKX")
+
+
+class InfoJob(ExchangeJob):
+    NAME = "exchange_info"
+
+    def __init__(self):
+        self.tools = Tools()
+        self.logger = self.tools.get_logger(EXCHANGE)
+
+    async def run(self, **kwargs):
+        okx = await Okx().create()
+        result = {
+            "timestamp": self.tools.get_timestap(),
+            "datetime": self.tools.get_datetime(),
+            "exchange": EXCHANGE,
+            "data": okx.exchange_info,
+        }
+
+        await self.save(result)
+        await okx.close()
+
+        self.logger.info(f"Insert exchange info of OKX")
+
+    async def save(self, data: dict):
+        collection = self.tools.init_collection("CexData", "exchange_info")
+        collection.insert_one(data)

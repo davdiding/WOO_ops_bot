@@ -92,6 +92,10 @@ class Tools(object):
         return int(dt.now().timestamp() * 1000)
 
     @staticmethod
+    def get_datetime() -> str:
+        return dt.now().strftime("%Y/%m/%d %H:%M:%S")
+
+    @staticmethod
     def get_today() -> int:
         return int(dt.combine(dt.today(), dt.min.time()).timestamp() * 1000)
 

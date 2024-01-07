@@ -278,3 +278,29 @@ class DcpJob(ExchangeJob):
         self.logger.info(
             f"Updates dcp of Binance from {kwargs['start']} to {kwargs['end']}. With {len(unique_timestamp)} timestamps and {len(unique_currency)} currencies."
         )
+
+
+class InfoJob(ExchangeJob):
+    NAME = "exchange_info"
+
+    def __init__(self):
+        self.tools = Tools()
+        self.logger = self.tools.get_logger(EXCHANGE)
+
+    async def run(self, **kwargs):
+        binance = await Binance().create()
+        result = {
+            "timestamp": self.tools.get_timestap(),
+            "datetime": self.tools.get_datetime(),
+            "exchange": EXCHANGE,
+            "data": binance.exchange_info,
+        }
+
+        await self.save(result)
+        await binance.close()
+
+        self.logger.info(f"Insert exchange info of Binance")
+
+    async def save(self, data: dict):
+        collection = self.tools.init_collection("CexData", "exchange_info")
+        collection.insert_one(data)

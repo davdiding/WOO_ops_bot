@@ -45,15 +45,8 @@ async def main():
 
     args = parser.parse_args()
 
-    inputs = {
-        "exchange": args.exchange,
-        "job": args.job,
-        "start": args.start,
-        "end": args.end,
-    }
-
     job_manager = JobManager()
-    await job_manager.run(**inputs)
+    await job_manager.run(**vars(args))
 
 
 if __name__ == "__main__":
