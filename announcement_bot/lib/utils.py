@@ -539,7 +539,8 @@ class Tools:
         for category in category_mismatch:
             self.logger.warning(f"Category {category} mismatch")
 
-        return sorted(list(category1))
+        category = [i for i in sorted(list(category1)) if i != ""]
+        return category
 
     def get_category_pattern(self) -> str:
         category = self.get_category()
