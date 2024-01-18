@@ -3,6 +3,7 @@ from .parsers.okx import OkxParser
 
 
 class Okx(OkxParser, OkxUnified):
+    name = "okx"
     market_type_map = {"spot": "SPOT", "margin": "MARGIN", "futures": "FUTURES", "perp": "SWAP"}
     _market_type_map = {"SPOT": "spot", "MARGIN": "margin", "FUTURES": "futures", "SWAP": "perp"}
 

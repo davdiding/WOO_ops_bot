@@ -3,6 +3,8 @@ from .parsers.bybit import BybitParser
 
 
 class Bybit(object):
+    name = "bybit"
+
     def __init__(self):
         self.bybit = BybitUnified()
         self.parser = BybitParser()

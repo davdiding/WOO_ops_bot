@@ -4,6 +4,8 @@ from .utils import query_dict, sort_dict
 
 
 class Binance(object):
+    name = "binance"
+
     def __init__(self):
         self.spot = BinanceSpot()
         self.linear = BinanceLinear()
