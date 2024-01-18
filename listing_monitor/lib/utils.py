@@ -2,6 +2,7 @@ import json
 import logging
 import os
 from datetime import datetime as dt
+from hashlib import md5
 
 import pymongo as pm
 
@@ -13,6 +14,7 @@ class Tool(object):
     DB_URL = "MONGO_URL"
     LOG_MAP = {
         "main": os.path.join(CURRENT_PATH, "log/main.log"),
+        "updater": os.path.join(CURRENT_PATH, "log/updater.log"),
     }
 
     def __init__(self):
@@ -50,3 +52,7 @@ class Tool(object):
 
         self.logger = logger
         return self.logger
+
+    def get_id(self, timestamp: int) -> str:
+        signature = md5(str(timestamp).encode()).hexdigest()
+        return signature

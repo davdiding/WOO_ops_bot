@@ -10,7 +10,7 @@ from exchange_service.okx import Okx
 class Updater(object):
     def __init__(self):
         self.tool = Tool()
-        self.logger = self.tool.get_logger("main")
+        self.logger = self.tool.get_logger("updater")
         self.collection = self.tool.init_collection("CexData", "exchange_info")
 
     async def run(self):
@@ -21,8 +21,10 @@ class Updater(object):
         # get exchange_info
         for exchange in [binance, okx, bybit]:
             exchange_info = await exchange.get_exchange_info()
+            timestamp = self.tool.get_timestamp()
             result = {
-                "timestamp": self.tool.get_timestamp(),
+                "id": self.tool.get_id(timestamp),
+                "timestamp": timestamp,
                 "datetime": self.tool.get_datetime(),
                 "exchange": exchange.name,
                 "data": exchange_info,
