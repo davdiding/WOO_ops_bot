@@ -1,5 +1,6 @@
 import asyncio
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from lib.utils import Tool
 
 from exchange_service.binance import Binance
@@ -38,6 +39,17 @@ class Updater(object):
         await bybit.close()
 
 
-if __name__ == "__main__":
+async def scheduled_run():
     updater = Updater()
-    asyncio.run(updater.run())
+    await updater.run()
+
+
+if __name__ == "__main__":
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(scheduled_run, "interval", minutes=30)
+    scheduler.start()
+
+    try:
+        asyncio.get_event_loop().run_forever()
+    except (KeyboardInterrupt, SystemExit):
+        pass
