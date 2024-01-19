@@ -1,6 +1,7 @@
-from lib.okx import Okx
 from lib.utils import Tools
 from pymongo import UpdateOne
+
+from exchange_service.okx import Okx
 
 from .exchange_job import ExchangeJob
 
