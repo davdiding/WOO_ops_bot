@@ -1,11 +1,6 @@
-import asyncio
-
 import pandas as pd
 import pymongo as pm
 from lib.utils import Tool
-
-# import pymongo as pm
-# from telegram import Bot
 
 
 class ListingMonitor:
@@ -48,4 +43,4 @@ async def main():
     monitor = ListingMonitor()
 
     for exchange in ["binance", "okx", "bybit"]:
-        asyncio.run(monitor.run(exchange))
+        await monitor.run(exchange)

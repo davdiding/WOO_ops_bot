@@ -46,7 +46,9 @@ class Tool(object):
         file_handler = logging.FileHandler(self.LOG_MAP[name])
         file_handler.setFormatter(formatter)
 
-        logger.addHandler(file_handler)
+        if not logger.handlers:
+            logger.addHandler(file_handler)
+
         logger.setLevel(logging.INFO)
         logger.propagate = False
 
