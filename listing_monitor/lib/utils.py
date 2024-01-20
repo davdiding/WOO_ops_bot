@@ -5,6 +5,7 @@ from datetime import datetime as dt
 from hashlib import md5
 
 import pymongo as pm
+from telegram import Bot
 
 
 class Tool(object):
@@ -58,3 +59,6 @@ class Tool(object):
     def get_id(self, timestamp: int) -> str:
         signature = md5(str(timestamp).encode()).hexdigest()
         return signature
+
+    def get_tg_bot(self, key: str) -> Bot:
+        return Bot(key)

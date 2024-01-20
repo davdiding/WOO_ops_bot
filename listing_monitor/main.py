@@ -8,6 +8,7 @@ class ListingMonitor:
         self.tool = Tool()
         self.logger = self.tool.get_logger("main")
         self.collection = self.tool.init_collection("CexData", "exchange_info")
+        self.bot = self.tool.get_tg_bot(self.tool.config["BOT_KEY"])
 
     async def run(self, exchange: str = None):
         # get the last two exchange info and do some comparison
@@ -33,6 +34,11 @@ class ListingMonitor:
                 self.logger.warning(
                     f"New instrument {key2} is added to {exchange}. old record id and datetime: {id1}, {date1}. new record id and datetime: {id2}, {date2}"
                 )
+
+                message = (
+                    f"[New Instrument]\n" f"Datetime: `{date2}`\n" f"Exchange: `{exchange}`\n" f"Symbol: `{key2}`\n"
+                )
+                self.bot.send_message(chat_id=self.tool.config["CHAT_ID"], text=message, parse_mode="Markdown")
                 continue
         self.logger.info(
             f"Finished checking {exchange}. old record id and datetime: {id1}, {date1}. new record id and datetime: {id2}, {date2}"
