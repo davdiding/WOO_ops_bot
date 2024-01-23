@@ -93,7 +93,7 @@ class AnnouncementBot:
 
     async def choose_labels(self, update: Update, context: ContextTypes) -> int:
         text = update.message.text
-        labels_or_names = text.split("\n")
+        labels_or_names = [i.strip() for i in text.split("\n") if i.strip() != ""]
         # read all labels and chat name, if any input in label then append to labels, otherwise append to names
         labels = []
         names = []
@@ -108,7 +108,9 @@ class AnnouncementBot:
                 if i in ["/cancel", "/cancel@WOO_Announcement_Request_Bot"]:
                     await self.cancel(update, context)
                     return ConversationHandler.END
-                await update.message.reply_text(f"Label or name `{i}` not found, please check again")
+                await update.message.reply_text(
+                    f"Label or name `{i}` not found, please check again", parse_mode="MarkdownV2"
+                )
                 return LABELS
 
         context.user_data["announcement"].labels = labels
