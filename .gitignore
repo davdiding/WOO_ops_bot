@@ -13,3 +13,4 @@ test_main.py
 cases.py
 log/
 announcement_bot/db/files
+test.py

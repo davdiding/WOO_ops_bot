@@ -2,9 +2,8 @@ import argparse
 import asyncio
 import importlib
 
-from lib.utils import Tools
-
 from .exchange_job import ExchangeJob
+from .lib.utils import Tools
 
 
 class JobManager:

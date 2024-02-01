@@ -10,12 +10,20 @@ class ListingMonitor:
         self.collection = self.tool.init_collection("CexData", "exchange_info")
         self.bot = self.tool.get_tg_bot(self.tool.config["BOT_KEY"])
 
-    async def run(self, exchange: str = None):
-        # get the last two exchange info and do some comparison
-        filter_ = {
-            "exchange": exchange,
-        }
-        df = pd.DataFrame(self.collection.find(filter_).sort("timestamp", pm.DESCENDING).limit(2))
+    async def run(self, exchange: str = None, ids: list = None):
+        if ids:
+            # get the exchange info by specific ids
+            filter_ = {
+                "exchange": exchange,
+                "id": {"$in": ids},
+            }
+            df = pd.DataFrame(self.collection.find(filter_).sort("timestamp", pm.DESCENDING))
+        else:
+            # get the last two exchange info and do some comparison
+            filter_ = {
+                "exchange": exchange,
+            }
+            df = pd.DataFrame(self.collection.find(filter_).sort("timestamp", pm.DESCENDING).limit(2))
 
         time1 = df["timestamp"].min()
         time2 = df["timestamp"].max()
@@ -38,8 +46,10 @@ class ListingMonitor:
                 message = (
                     f"[New Instrument]\n" f"Datetime: `{date2}`\n" f"Exchange: `{exchange}`\n" f"Symbol: `{key2}`\n"
                 )
-                await self.bot.send_message(chat_id=self.tool.config["CHAT_ID"], text=message, parse_mode="Markdown")
-                continue
+                message = await self.bot.send_message(
+                    chat_id=self.tool.config["CHAT_ID"], text=message, parse_mode="Markdown"
+                )
+
         self.logger.info(
             f"Finished checking {exchange}. old record id and datetime: {id1}, {date1}. new record id and datetime: {id2}, {date2}"
         )
@@ -50,3 +60,9 @@ async def main():
 
     for exchange in ["binance", "okx", "bybit"]:
         await monitor.run(exchange)
+
+
+if __name__ == "__main__":
+    import asyncio
+
+    asyncio.run(main())
