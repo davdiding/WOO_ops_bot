@@ -44,11 +44,12 @@ class ListingMonitor:
                 )
 
                 message = (
-                    f"[New Instrument]\n" f"Datetime: `{date2}`\n" f"Exchange: `{exchange}`\n" f"Symbol: `{key2}`\n"
+                    f"[New Instrument]\n"
+                    f"Datetime: `{date2}``(utc+0)`\n"
+                    f"Exchange: `{exchange}`\n"
+                    f"Symbol: `{key2}`\n"
                 )
-                message = await self.bot.send_message(
-                    chat_id=self.tool.config["CHAT_ID"], text=message, parse_mode="Markdown"
-                )
+                await self.bot.send_message(chat_id=self.tool.config["CHAT_ID"], text=message, parse_mode="Markdown")
 
         self.logger.info(
             f"Finished checking {exchange}. old record id and datetime: {id1}, {date1}. new record id and datetime: {id2}, {date2}"
