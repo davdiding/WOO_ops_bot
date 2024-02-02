@@ -39,3 +39,9 @@ class Updater(object):
 async def main():
     updater = Updater()
     await updater.run()
+
+
+if __name__ == "__main__":
+    import asyncio
+
+    asyncio.run(main())
