@@ -1,7 +1,6 @@
+from cex_services.bybit import Bybit
 from lib.utils import Tools
 from pymongo import UpdateOne
-
-from exchange_service.bybit import Bybit
 
 from .exchange_job import ExchangeJob
 

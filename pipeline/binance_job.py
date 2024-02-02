@@ -3,10 +3,9 @@ from datetime import datetime as dt
 from datetime import timedelta as td
 
 import pandas as pd
+from cex_services.binance import Binance
 from lib.utils import Tools, query_dict
 from pymongo import UpdateOne
-
-from exchange_service.binance import Binance
 
 from .exchange_job import ExchangeJob
 

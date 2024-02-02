@@ -1,8 +1,7 @@
+from cex_services.binance import Binance
+from cex_services.bybit import Bybit
+from cex_services.okx import Okx
 from lib.utils import Tool
-
-from exchange_service.binance import Binance
-from exchange_service.bybit import Bybit
-from exchange_service.okx import Okx
 
 
 class Updater(object):
