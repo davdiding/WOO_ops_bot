@@ -12,13 +12,22 @@ class Kucoin(object):
 
         self.exchange_info = {}
 
+    @classmethod
+    async def create(cls):
+        instance = cls()
+        instance.exchange_info = await instance.get_exchange_info()
+        return instance
+
     async def close(self):
         await self.spot.close()
         await self.futures.close()
 
     async def get_exchange_info(self) -> dict:
-        spot = self.parser.parse_exchange_info(await self.spot._get_exchange_info())
+        spot = self.parser.parse_exchange_info(
+            await self.spot._get_symbol_list(), self.parser.spot_exchange_info_parser
+        )
+        futures = self.parser.parse_exchange_info(
+            await self.futures._get_symbol_list(), self.parser.futures_exchange_info_parser
+        )
 
-        return {
-            **spot,
-        }
+        return {**spot, **futures}
