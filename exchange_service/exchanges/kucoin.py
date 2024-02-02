@@ -8,8 +8,11 @@ class KucoinSpot(BaseClient):
         super().__init__()
         self.spot_base_endpoint = self.BASE_ENDPOINT
 
-    async def _get_exchange_info(self):
+    async def _get_currency_list(self):
         return await self._get(self.spot_base_endpoint + "/api/v3/currencies")
+
+    async def _get_symbol_list(self):
+        return await self._get(self.spot_base_endpoint + "/api/v2/symbols")
 
 
 class KucoinFutures(BaseClient):
@@ -19,5 +22,5 @@ class KucoinFutures(BaseClient):
         super().__init__()
         self.futures_base_endpoint = self.BASE_ENDPOINT
 
-    async def _get_exchange_info(self):
+    async def _get_symbol_list(self):
         return await self._get(self.futures_base_endpoint + "/api/v1/contracts/active")

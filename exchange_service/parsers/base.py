@@ -4,7 +4,7 @@ from ..utils import query_dict
 
 
 class Parser:
-    MULTIPLIER = ["1000000", "100000", "10000", "1000"]
+    MULTIPLIER = ["1000000", "100000", "10000", "1000", "100", "10"]
     SPOT_TYPES = ["SPOT"]
     MARGIN_TYPES = ["MARGIN", "both", "utaOnly", "normalOnly"]
     FUTURES_TYPES = ["FUTURES", "LinearFutures", "InverseFutures", "NEXT_QUARTER", "CURRENT_QUARTER"]

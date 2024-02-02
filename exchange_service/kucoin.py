@@ -23,10 +23,11 @@ class Kucoin(object):
         await self.futures.close()
 
     async def get_exchange_info(self) -> dict:
-        spot = self.parser.parse_exchange_info(await self.spot._get_exchange_info())
-        futures = self.parser.parse_exchange_info(await self.futures._get_exchange_info())
+        spot = self.parser.parse_exchange_info(
+            await self.spot._get_symbol_list(), self.parser.spot_exchange_info_parser
+        )
+        futures = self.parser.parse_exchange_info(
+            await self.futures._get_symbol_list(), self.parser.futures_exchange_info_parser
+        )
 
-        return {
-            **spot,
-            **futures,
-        }
+        return {**spot, **futures}
