@@ -14,3 +14,10 @@ class KucoinSpot(BaseClient):
 
 class KucoinFutures(BaseClient):
     BASE_ENDPOINT = "https://api-futures.kucoin.com"
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.futures_base_endpoint = self.BASE_ENDPOINT
+
+    async def _get_exchange_info(self):
+        return await self._get(self.futures_base_endpoint + "/api/v1/contracts/active")
