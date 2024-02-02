@@ -9,6 +9,7 @@ backports.zoneinfo==0.2.1
 beautifultable==1.1.0
 cachetools==5.3.1
 certifi==2023.7.22
+cex-services==1.0.0
 cffi==1.16.0
 cfgv==3.4.0
 charset-normalizer==3.3.0
@@ -20,7 +21,6 @@ distlib==0.3.7
 dnspython==2.4.2
 et-xmlfile==1.1.0
 exceptiongroup==1.1.3
--e git+git@github.com:davdiding/WOO_ops_bot.git@78def53233eb46dd7c776ea8a6d4629d78ff2a58#egg=exchange_service&subdirectory=exchange_service
 filelock==3.13.1
 fonttools==4.46.0
 frozenlist==1.4.0
