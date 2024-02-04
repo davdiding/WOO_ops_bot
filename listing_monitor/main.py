@@ -59,7 +59,7 @@ class ListingMonitor:
 async def main():
     monitor = ListingMonitor()
 
-    for exchange in ["binance", "okx", "bybit"]:
+    for exchange in ["binance", "okx", "bybit", "kucoin", "gateio"]:
         await monitor.run(exchange)
 
 
