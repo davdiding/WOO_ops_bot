@@ -32,7 +32,7 @@ class Updater(object):
             }
             self.collection.insert_one(result)
 
-        self.logger.info("Update exchange_info of binance, okx, bybit")
+        self.logger.info("Update exchange_info of binance, okx, bybit, kucoin, gateio.")
 
         await binance.close()
         await okx.close()
