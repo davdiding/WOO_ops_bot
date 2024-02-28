@@ -1,6 +1,8 @@
 from cex_services.binance import Binance
+from cex_services.bitget import Bitget
 from cex_services.bybit import Bybit
 from cex_services.gateio import Gateio
+from cex_services.htx import Htx
 from cex_services.kucoin import Kucoin
 from cex_services.okx import Okx
 from lib.utils import Tool
@@ -18,9 +20,11 @@ class Updater(object):
         bybit = await Bybit().create()
         kucoin = await Kucoin().create()
         gateio = await Gateio().create()
+        htx = await Htx().create()
+        bitget = await Bitget().create()
 
         # get exchange_info
-        for exchange in [binance, okx, bybit, kucoin, gateio]:
+        for exchange in [binance, okx, bybit, kucoin, gateio, htx, bitget]:
             exchange_info = await exchange.get_exchange_info()
             timestamp = self.tool.get_timestamp()
             result = {
@@ -32,13 +36,15 @@ class Updater(object):
             }
             self.collection.insert_one(result)
 
-        self.logger.info("Update exchange_info of binance, okx, bybit, kucoin, gateio.")
+        self.logger.info("Update exchange_info of binance, okx, bybit, kucoin, gateio, htx, bitget.")
 
         await binance.close()
         await okx.close()
         await bybit.close()
         await kucoin.close()
         await gateio.close()
+        await htx.close()
+        await bitget.close()
 
 
 async def main():
