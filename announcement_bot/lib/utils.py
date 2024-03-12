@@ -593,30 +593,6 @@ class Tools:
 
         return chat_list
 
-    def get_confirm_message(self, annc: Announcement) -> str:
-        if annc.category != "others":
-            message = (
-                f"<b>[Confirm Message]</b>\n\n"
-                f"<b>ID:</b> <code>{annc.id}</code>\n"
-                f"<b>Creator:</b> {annc.creator}\n"
-                f"<b>Category:</b> <code>{self.get_columns_name(annc.category, 'cl')}</code>\n"
-                f"<b>Language:</b> <code>{self.get_columns_name(annc.language, 'al')}</code>\n"
-                f"<b>Chat numbers:</b> {len(annc.available_chats)}\n"
-                f"<b>Contents:</b>\n\n"
-                f"{annc.content_html}"
-            )
-        else:
-            message = (
-                f"<b>[Confirm Message]</b>\n\n"
-                f"<b>ID:</b> <code>{annc.id}</code>\n"
-                f"<b>Creator:</b> {annc.creator}\n"
-                f"<b>Chat numbers:</b> {len(annc.available_chats)}\n"
-                f"<b>Contents:</b>\n\n"
-                f"{annc.content_html}"
-            )
-
-        return message
-
     def get_post_confirm_message(self, annc: Announcement) -> str:
         if annc.category != "others":
             message = (
