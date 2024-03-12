@@ -617,6 +617,28 @@ class Tools:
 
         return message
 
+    def get_post_confirm_message(self, annc: Announcement) -> str:
+        if annc.category != "others":
+            message = (
+                f"<b>[Confirm Message]</b>\n\n"
+                f"<b>ID:</b> <code>{annc.id}</code>\n"
+                f"<b>Creator:</b> {annc.creator}\n"
+                f"<b>Category:</b> <code>{self.get_columns_name(annc.category, 'cl')}</code>\n"
+                f"<b>Language:</b> <code>{self.get_columns_name(annc.language, 'al')}</code>\n"
+                f"<b>Chat numbers:</b> {len(annc.available_chats)}\n"
+                f"<a> Please check the announcement content in the next message.</a>"
+            )
+        else:
+            message = (
+                f"<b>[Confirm Message]</b>\n\n"
+                f"<b>ID:</b> <code>{annc.id}</code>\n"
+                f"<b>Creator:</b> {annc.creator}\n"
+                f"<b>Chat numbers:</b> {len(annc.available_chats)}\n"
+                f"<a> Please check the announcement content in the next message.</a>"
+            )
+
+        return message
+
     def get_edit_confirm_message(self, ticket: EditTicket) -> str:
         message = (
             f"<b>[Confirm Message]</b>\n\n"
