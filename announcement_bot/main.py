@@ -188,21 +188,33 @@ class AnnouncementBot:
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
+        # declare variable for confirm message
+        chat_id = self.tools.config[self.CONFIRMATION_GROUP] if not self.is_test else "5327851721"
+        annc: Announcement = context.user_data["announcement"]
+
+        # send out first part of confirm message, include confirm button
+        inputs = {
+            "chat_id": chat_id,
+            "text": self.tools.get_post_confirm_message(annc),
+            "parse_mode": "HTML",
+            "reply_markup": reply_markup,
+        }
+        await context.bot.send_message(**inputs)
+
+        # send out second part of confirm message, to check the announcement content
         if annc_type in ["photo", "video"]:
             inputs = {
-                "chat_id": self.tools.config[self.CONFIRMATION_GROUP] if not self.is_test else "5327851721",
+                "chat_id": chat_id,
                 annc_type: file["id"],
-                "caption": self.tools.get_confirm_message(context.user_data["announcement"]),
+                "caption": annc.content_html,
                 "parse_mode": "HTML",
-                "reply_markup": reply_markup,
             }
 
         else:
             inputs = {
-                "chat_id": self.tools.config[self.CONFIRMATION_GROUP] if not self.is_test else "5327851721",
-                "text": self.tools.get_confirm_message(context.user_data["announcement"]),
+                "chat_id": chat_id,
+                "text": annc.content_html,
                 "parse_mode": "HTML",
-                "reply_markup": reply_markup,
             }
 
         await method_map[annc_type](**inputs)
