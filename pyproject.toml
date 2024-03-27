@@ -1,18 +1,11 @@
 [tool.poetry]
 authors = []
 description = ""
-name = "bybit"
-packages = [{include = "bybit"}]
+name = ""
+packages = []
 readme = "README.md"
 version = "0.1.0"
 
-[tool.poetry.dependencies]
-core = {path = "../core"}
-python = "^3.10"
-python-dotenv = "^1.0.0"
-term-structure-python-sdk = {path = "../term-structure-python-sdk"}
-fastapi = "^0.103.1"
-uvicorn = "^0.23.2"
 
 [tool.poetry.group.test.dependencies]
 pytest = "^7.4.0"
@@ -55,8 +48,7 @@ known_third_party = []
 known_local_folder = []
 
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
 ignore_missing_imports = true
-

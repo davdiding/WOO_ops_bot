@@ -1,5 +1,5 @@
 default_language_version:
-  python: python3.8
+  python: python3.10
 default_stages: [commit]
 fail_fast: true
 repos:
@@ -17,10 +17,6 @@ repos:
     hooks:
       - id: isort
         additional_dependencies: [toml]
-  - repo: https://github.com/adrienverge/yamllint
-    rev: v1.26.3
-    hooks:
-      - id: yamllint
   - repo: https://github.com/pycqa/flake8
     rev: 3.7.7
     hooks:
