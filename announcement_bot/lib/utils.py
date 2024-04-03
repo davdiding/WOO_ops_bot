@@ -245,6 +245,7 @@ class Tools:
     )
     ONLINE_ANNC_RECORDS_TABLE_NAME = "Announcement History (formal)"
     ONLINE_EDIT_TICKET_RECORDS_TABLE_NAME = "Edit History (formal)"
+    ONLINE_DELETE_TICKET_RECORDS_TABLE_NAME = "Delete History (formal)"
 
     CHAT_INFO_COLUMNS_MAP = {
         "name": "Name",
@@ -291,6 +292,17 @@ class Tools:
         "approver": "Approver",
         "original_content_text": "Original Content",
         "new_content_text": "New Content",
+        "status": "Status",
+    }
+
+    DELETE_TICKET_INFO_COLUMNS_MAP = {
+        "id": "ID",
+        "original_id": "Original ID",
+        "create_time": "Create Time",
+        "approved_time": "Approved Time",
+        "creator": "Creator",
+        "approver": "Approver",
+        "original_content_text": "Original Content",
         "status": "Status",
     }
 
@@ -369,7 +381,7 @@ class Tools:
             return ws.worksheet_by_title(name)
 
     def update_columns_map(self):
-        pass
+        return NotImplemented
 
     def get_logger(self, name: str):
         log_path_map = {"InfoBot": self.INFO_BOT_LOG_PATH, "MainBot": self.MAIN_BOT_LOG_PATH}
@@ -387,13 +399,21 @@ class Tools:
         self.logger = logger
         return self.logger
 
-    def get_annc_id(self, if_test: bool) -> str:
+    @staticmethod
+    def get_annc_id(if_test: bool) -> str:
         timestamp = str(int(datetime.now().timestamp() * 1000))
         return timestamp if not if_test else f"test-{timestamp}"
 
-    def get_edit_id(self, if_test: bool) -> str:
+    @staticmethod
+    def get_edit_id(if_test: bool) -> str:
         timestamp = str(int(datetime.now().timestamp() * 1000))
-        signature = hashlib.md5(timestamp.encode()).hexdigest()
+        signature = "edit-" + hashlib.md5(timestamp.encode()).hexdigest()
+        return signature if not if_test else f"test-{signature}"
+
+    @staticmethod
+    def get_delete_id(if_test: bool) -> str:
+        timestamp = str(int(datetime.now().timestamp() * 1000))
+        signature = "delete-" + hashlib.md5(timestamp.encode()).hexdigest()
         return signature if not if_test else f"test-{signature}"
 
     def get_columns_name(self, col: str, input: str) -> str:
@@ -426,6 +446,9 @@ class Tools:
                     return k
         elif input == "el":
             return self.EDIT_TICKET_INFO_COLUMNS_MAP[col]
+
+        elif input == "dl":
+            return self.DELETE_TICKET_INFO_COLUMNS_MAP[col]
 
     def update_chat_info(self, update_type: str) -> None:
         """
@@ -630,6 +653,18 @@ class Tools:
 
         return message
 
+    def get_delete_confirm_message(self, ticket: DeleteTicket) -> str:
+        message = (
+            f"<b>[Confirm Message]</b>\n\n"
+            f"<b>ID:</b> <code>{ticket.id}</code>\n"
+            f"<b>Annc ID:</b> <code>{ticket.original_id}</code>\n"
+            f"<b>Creator:</b> {ticket.creator}\n"
+            f"<b>Chat numbers:</b> {len(ticket.available_chats)}\n"
+            f"Please check the announcement be deleted in the next message."
+        )
+
+        return message
+
     def get_report_message(self, annc: any):
         if isinstance(annc, Announcement):
             if annc.category != "others":
@@ -738,6 +773,15 @@ class Tools:
 
         await asyncio.gather(*tasks)
 
+    async def delete_annc(self, ticket: DeleteTicket, bot: Bot):
+        tasks = []
+
+        for chat in ticket.available_chats:
+            task = asyncio.create_task(bot.delete_message(chat["id"], chat["message_id"]))
+            tasks.append(task)
+
+        await asyncio.gather(*tasks)
+
     async def save_file(self, id: str, bot: Bot) -> dict:
         if id == "":
             return {
@@ -801,6 +845,10 @@ class Tools:
         annc_records = self.init_collection("AnnouncementDB", "Announcement")
         annc_records.insert_one(ticket.__dict__)
 
+    def input_delete_record(self, ticket: DeleteTicket) -> None:
+        annc_records = self.init_collection("AnnouncementDB", "Announcement")
+        annc_records.insert_one(ticket.__dict__)
+
     def get_annc_by_id(self, id: any) -> Announcement:
         annc_records = self.init_collection("AnnouncementDB", "Announcement")
         filter_ = {"id": str(id), "operation": "post"}
@@ -823,10 +871,21 @@ class Tools:
         else:
             return None
 
+    def get_delete_ticket_by_id(self, id: str) -> DeleteTicket:
+        annc_records = self.init_collection("AnnouncementDB", "Announcement")
+        filter_ = {"id": id, "operation": "delete"}
+        ticket = annc_records.find_one(filter_)
+
+        if ticket:
+            del ticket["_id"]
+            return DeleteTicket(**ticket)
+        else:
+            return None
+
     def update_annc_record(self) -> None:
         annc_records = self.init_collection("AnnouncementDB", "Announcement")
         filter_ = {"operation": "post", "id": {"$not": {"$regex": "^test"}}}
-        annc_records = pd.DataFrame(list(annc_records.find(filter_)))
+        annc_records = pd.DataFrame(list(annc_records.find(filter_))).sort_values(by="create_time", ascending=True)
 
         annc_records["expected_number"] = annc_records["available_chats"].apply(
             lambda x: len(x) if isinstance(x, list) else 0
@@ -887,7 +946,7 @@ class Tools:
     def update_edit_record(self) -> None:
         annc_records = self.init_collection("AnnouncementDB", "Announcement")
         filter_ = {"operation": "edit", "id": {"$not": {"$regex": "^test"}}}
-        tickets = pd.DataFrame(list(annc_records.find(filter_)))
+        tickets = pd.DataFrame(list(annc_records.find(filter_))).sort_values(by="create_time", ascending=True)
 
         drop_columns = [
             "_id",
@@ -918,7 +977,41 @@ class Tools:
         online_sheet.clear()
         online_sheet.set_dataframe(tickets, (1, 1))
 
-    def get_help_message(self) -> str:
+    def update_delete_record(self) -> None:
+        annc_records = self.init_collection("AnnouncementDB", "Announcement")
+        filter_ = {"operation": "delete", "id": {"$not": {"$regex": "^test"}}}
+        tickets = pd.DataFrame(list(annc_records.find(filter_))).sort_values(by="create_time", ascending=True)
+
+        drop_columns = [
+            "_id",
+            "available_chats",
+            "creator_id",
+            "approver_id",
+            "original_content_html",
+        ]
+
+        tickets = tickets.drop(columns=drop_columns)[
+            [
+                "id",
+                "status",
+                "create_time",
+                "approved_time",
+                "creator",
+                "approver",
+                "original_id",
+                "original_content_text",
+            ]
+        ]
+        tickets.columns = [self.get_columns_name(col, "dl") for col in tickets.columns]
+
+        online_sheet = self.init_online_sheet(
+            self.ONLINE_ANNC_RECORDS_URL, self.ONLINE_DELETE_TICKET_RECORDS_TABLE_NAME, to_type="ws"
+        )
+        online_sheet.clear()
+        online_sheet.set_dataframe(tickets, (1, 1))
+
+    @staticmethod
+    def get_help_message() -> str:
         return """
 🤖 **Welcome to the Announcement Bot**\! 🎉
 
