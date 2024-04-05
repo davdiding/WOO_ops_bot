@@ -227,10 +227,10 @@ class AnnouncementBot:
 
         message = (
             f"Your post has been sent to the admin group for approval, "
-            f"please wait patiently.\n"
-            f"ID: {context.user_data['announcement'].id}"
+            f"please wait patiently\.\n"
+            f"ID: `{context.user_data['announcement'].id}`"
         )
-        await update.message.reply_text(message)
+        await update.message.reply_text(message, parse_mode="MarkdownV2")
 
         return ConversationHandler.END
 
@@ -500,10 +500,25 @@ class AnnouncementBot:
             reply_markup=reply_markup,
         )
 
-        await self.bot.send_message(
-            chat_id=self.tools.config[self.CONFIRMATION_GROUP] if not self.is_test else "5327851721",
-            text=delete_ticket.original_content_html,
-            parse_mode="HTML",
+        method_map = {
+            "photo": self.bot.send_photo,
+            "video": self.bot.send_video,
+            "text": self.bot.send_message,
+        }
+        if annc.content_type in ["photo", "video"]:
+            inputs = {
+                annc.content_type: annc.file_path,
+                "caption": annc.content_html,
+                "parse_mode": "HTML",
+            }
+        else:
+            inputs = {
+                "text": annc.content_html,
+                "parse_mode": "HTML",
+            }
+
+        await method_map[annc.content_type](
+            chat_id=self.tools.config[self.CONFIRMATION_GROUP] if not self.is_test else "5327851721", **inputs
         )
 
         self.tools.input_delete_record(delete_ticket)
@@ -525,6 +540,7 @@ class AnnouncementBot:
         status = response.split("_")[1]
         delete_id = response.split("_")[2]
         ticket = self.tools.get_delete_ticket_by_id(delete_id)
+        print(ticket.id, status)
 
         operator = update.effective_user
         if self.tools.is_admin(operator.id):
@@ -545,10 +561,14 @@ class AnnouncementBot:
 
             # update ticket in announcement DB
             annc_db = self.tools.init_collection("AnnouncementDB", "Announcement")
-            filter_ = {"id": ticket.original_id}
+            filter_ = {"id": ticket.id}
             update_ = {"$set": ticket.__dict__}
-            annc_db.update_one(filter_, update_)
+            annc_db.update_one(filter_, update_, upsert=True)
             self.tools.update_delete_record()
+
+            # edit confirmation message
+            repost_message = self.tools.get_report_message(ticket)
+            await update.callback_query.message.edit_text(repost_message, parse_mode="HTML")
 
         else:
             self.logger.warn(f"Unauthorized user {operator.full_name}({operator.id}) tried to delete")

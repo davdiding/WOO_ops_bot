@@ -701,6 +701,16 @@ class Tools:
                 f"<b>New Contents:</b>\n\n"
                 f"{annc.new_content_html}"
             )
+        elif isinstance(annc, DeleteTicket):
+            message = (
+                f"<b>[{'Approved' if annc.status == 'approved' else 'Rejected'} Message]</b>\n\n"
+                f"<b>Operation:</b> <code>{annc.operation}</code>\n"
+                f"<b>ID:</b> <code>{annc.id}</code>\n"
+                f"<b>Annc ID:</b> <code>{annc.original_id}</code>\n"
+                f"<b>Creator:</b> {annc.creator}\n"
+                f"<b>Operator:</b> {annc.approver}\n"
+                f"<b>Chat numbers:</b> {len(annc.available_chats)}\n"
+            )
         else:
             self.logger.warning(f"Unknow type of annc: {type(annc)}")
         return message
@@ -885,7 +895,7 @@ class Tools:
     def update_annc_record(self) -> None:
         annc_records = self.init_collection("AnnouncementDB", "Announcement")
         filter_ = {"operation": "post", "id": {"$not": {"$regex": "^test"}}}
-        annc_records = pd.DataFrame(list(annc_records.find(filter_))).sort_values(by="create_time", ascending=True)
+        annc_records = pd.DataFrame(list(annc_records.find(filter_))).sort_values(by="create_time", ascending=False)
 
         annc_records["expected_number"] = annc_records["available_chats"].apply(
             lambda x: len(x) if isinstance(x, list) else 0
@@ -946,7 +956,7 @@ class Tools:
     def update_edit_record(self) -> None:
         annc_records = self.init_collection("AnnouncementDB", "Announcement")
         filter_ = {"operation": "edit", "id": {"$not": {"$regex": "^test"}}}
-        tickets = pd.DataFrame(list(annc_records.find(filter_))).sort_values(by="create_time", ascending=True)
+        tickets = pd.DataFrame(list(annc_records.find(filter_))).sort_values(by="create_time", ascending=False)
 
         drop_columns = [
             "_id",
@@ -980,7 +990,10 @@ class Tools:
     def update_delete_record(self) -> None:
         annc_records = self.init_collection("AnnouncementDB", "Announcement")
         filter_ = {"operation": "delete", "id": {"$not": {"$regex": "^test"}}}
-        tickets = pd.DataFrame(list(annc_records.find(filter_))).sort_values(by="create_time", ascending=True)
+        db = pd.DataFrame(list(annc_records.find(filter_)))
+        if db.empty:
+            return
+        tickets = db.sort_values(by="create_time", ascending=False)
 
         drop_columns = [
             "_id",
