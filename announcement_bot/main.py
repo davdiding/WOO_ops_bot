@@ -1,7 +1,7 @@
 import argparse
 from datetime import datetime as dt
 
-from lib.utils import Announcement, EditTicket, Tools, init_args
+from lib.utils import Announcement, DeleteTicket, EditTicket, Tools, init_args
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update, request
 from telegram.ext import (
     Application,
@@ -227,10 +227,10 @@ class AnnouncementBot:
 
         message = (
             f"Your post has been sent to the admin group for approval, "
-            f"please wait patiently.\n"
-            f"ID: {context.user_data['announcement'].id}"
+            f"please wait patiently\.\n"
+            f"ID: `{context.user_data['announcement'].id}`"
         )
-        await update.message.reply_text(message)
+        await update.message.reply_text(message, parse_mode="MarkdownV2")
 
         return ConversationHandler.END
 
@@ -437,19 +437,147 @@ class AnnouncementBot:
         if not self.tools.in_whitelist(operator.id):
             await update.message.reply_text(f"Hi {operator.full_name}, You are not in the whitelist")
             return ConversationHandler.END
-        print(operator_full_name)
+        else:
+            inputs = {
+                "id": self.tools.get_delete_id(self.is_test),
+                "operation": "delete",
+                "create_time": dt.now(),
+                "creator": operator_full_name,
+                "creator_id": operator.id,
+            }
+            delete_ticket = DeleteTicket(**inputs)
+            context.user_data["delete_ticket"] = delete_ticket
+            await update.message.reply_text(
+                f"Hello {operator_full_name}! Please enter the ID of the announcement you want to delete."
+            )
+            return ANNC_ID
 
     async def choose_delete_id(self, update: Update, context: ContextTypes) -> ConversationHandler.END:
-        pass
+        # get the annc by id, and send the confirmation message to approve group.
+        annc_id = update.message.text
+        delete_ticket: DeleteTicket = context.user_data["delete_ticket"]
+
+        if annc_id in ["/cancel", "/cancel@WOO_Announcement_Request_Bot"]:
+            await self.cancel(update, context)
+            return ConversationHandler.END
+
+        annc = self.tools.get_annc_by_id(annc_id)
+
+        if annc is None:
+            await update.message.reply_text(
+                f"Announcement `{annc_id}` not found, please check again", parse_mode="MarkdownV2"
+            )
+            return ANNC_ID
+
+        if annc.status != "approved":
+            await update.message.reply_text(
+                f"Announcement `{annc_id}` is not approved, please check again", parse_mode="MarkdownV2"
+            )
+            return ANNC_ID
+
+        update_ = {
+            "original_id": annc.id,
+            "content_type": annc.content_type,
+            "original_content_text": annc.content_text,
+            "original_content_html": annc.content_html,
+            "available_chats": annc.record,
+            "status": "pending",
+        }
+        delete_ticket.update(**update_)
+
+        # send the confirmation message to approve group
+        keyboard = [
+            [InlineKeyboardButton("Approve", callback_data=f"delete_approve_{delete_ticket.id}")],
+            [InlineKeyboardButton("Reject", callback_data=f"delete_reject_{delete_ticket.id}")],
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        message = self.tools.get_delete_confirm_message(delete_ticket)
+        await self.bot.send_message(
+            chat_id=self.tools.config[self.CONFIRMATION_GROUP] if not self.is_test else "5327851721",
+            text=message,
+            parse_mode="HTML",
+            reply_markup=reply_markup,
+        )
+
+        method_map = {
+            "photo": self.bot.send_photo,
+            "video": self.bot.send_video,
+            "text": self.bot.send_message,
+        }
+        if annc.content_type in ["photo", "video"]:
+            inputs = {
+                annc.content_type: annc.file_path,
+                "caption": annc.content_html,
+                "parse_mode": "HTML",
+            }
+        else:
+            inputs = {
+                "text": annc.content_html,
+                "parse_mode": "HTML",
+            }
+
+        await method_map[annc.content_type](
+            chat_id=self.tools.config[self.CONFIRMATION_GROUP] if not self.is_test else "5327851721", **inputs
+        )
+
+        self.tools.input_delete_record(delete_ticket)
+        self.tools.update_delete_record()
+
+        self.logger.info(
+            f"Delete ticket {delete_ticket.id} sent by {update.message.from_user.full_name}({update.message.from_user.id})"
+        )
+        message = (
+            f"Your delete ticket has been sent to the admin group for approval, "
+            f"please wait patiently\.\n"
+            f"ID: `{delete_ticket.id}`"
+        )
+        await update.message.reply_text(message, parse_mode="MarkdownV2")
+        return ConversationHandler.END
 
     async def delete_confirmation(self, update: Update, context: ContextTypes) -> ConversationHandler.END:
-        pass
+        response = update.callback_query.data
+        status = response.split("_")[1]
+        delete_id = response.split("_")[2]
+        ticket = self.tools.get_delete_ticket_by_id(delete_id)
+        print(ticket.id, status)
+
+        operator = update.effective_user
+        if self.tools.is_admin(operator.id):
+            inputs = {
+                "approver": operator.full_name,
+                "approver_id": operator.id,
+                "approved_time": dt.now(),
+            }
+            if status == "approve":
+                await self.tools.delete_annc(ticket, self.info_bot)
+                inputs["status"] = "approved"
+                ticket.update(**inputs)
+            else:
+                inputs["status"] = "rejected"
+                ticket.update(**inputs)
+
+            self.logger.info(f"Delete ticket {ticket.id} was {ticket.status} by {operator.full_name}({operator.id})")
+
+            # update ticket in announcement DB
+            annc_db = self.tools.init_collection("AnnouncementDB", "Announcement")
+            filter_ = {"id": ticket.id}
+            update_ = {"$set": ticket.__dict__}
+            annc_db.update_one(filter_, update_, upsert=True)
+            self.tools.update_delete_record()
+
+            # edit confirmation message
+            repost_message = self.tools.get_report_message(ticket)
+            await update.callback_query.message.edit_text(repost_message, parse_mode="HTML")
+
+        else:
+            self.logger.warn(f"Unauthorized user {operator.full_name}({operator.id}) tried to delete")
 
     async def check_permission(self, update: Update, context: ContextTypes) -> ConversationHandler.END:
         operator = update.message.from_user
 
         if not self.tools.is_admin(operator.id):
-            await update.message.reply_text(f"Hi {operator.full_name}, You are not an admin, cann't check permission.")
+            await update.message.reply_text(f"Hi {operator.full_name}, You are not an admin, can't check permission.")
             return ConversationHandler.END
 
         table = self.tools.get_permission_table()
