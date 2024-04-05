@@ -262,9 +262,7 @@ class AnnouncementBot:
 
             repost_message = self.tools.get_report_message(annc)
 
-            await query.message.edit_text(
-                repost_message, parse_mode="HTML"
-            ) if annc.content_type == "text" else await query.message.edit_caption(repost_message, parse_mode="HTML")
+            await query.message.edit_text(repost_message, parse_mode="HTML")
 
             self.logger.info(f"Announcement {annc.id} was {annc.status} by {approver.full_name}({approver.id})")
 
