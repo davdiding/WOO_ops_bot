@@ -14,3 +14,4 @@ cases.py
 log/
 announcement_bot/db/files
 test.py
+gc_credential.json
