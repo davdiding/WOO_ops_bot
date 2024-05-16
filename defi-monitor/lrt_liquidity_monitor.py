@@ -1,8 +1,12 @@
 import asyncio
+import os
 
 from dex_adaptors.balancer_v2 import BalancerV2
 from dex_adaptors.curve import Curve
+from dotenv import load_dotenv
 from lib.utils import Tools
+
+load_dotenv()
 
 
 class LiquidityMonitor:
@@ -24,8 +28,8 @@ class LiquidityMonitor:
         "rETH/WETH": {"pool_id": "0x1e19cf2d73a72ef1332c882f20534b6519be0276000200000000000000000112"},
     }
 
-    credential_path = r"/Users/davidding/Desktop/TKSpring/security/gc_api.json"
-    dashboard_url = "https://docs.google.com/spreadsheets/d/16SAbWVwCmaDpR6R2tLNjmsptjab4udXb9wjK7ijn5I0"
+    credential_path = os.getenv("GC_CREDENTIAL_PATH")
+    dashboard_url = os.getenv("DASHBOARD_URL")
     dashboard_name = "LRT markets liquidity pool data"
 
     def __init__(self):
@@ -47,7 +51,7 @@ class LiquidityMonitor:
         dashboard = self.get_dashboard_index()
 
         for pool in self.balancer_pool_map:
-            print(f"Getting data for {pool} pool from Balancer V2")
+            print(f"Getting data for {pool} pool from Balancer V2 on ethereum")
             pool_id = self.balancer_pool_map[pool]["pool_id"]
             data = await bal.get_pool_data(pool_id)
             self.balancer_pool_map[pool]["address"] = data["address"]
