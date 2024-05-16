@@ -10,7 +10,7 @@ class Tools:
         return pg.authorize(service_file=credential_path)
 
     @staticmethod
-    def init_wks(gc, sheet_url: str, ws_name: str) -> pd.DataFrame:
+    def init_wks(gc, sheet_url: str, ws_name: str) -> pg.Worksheet:
         sh = gc.open_by_url(sheet_url)
         return sh.worksheet_by_title(ws_name)
 
