@@ -72,12 +72,19 @@ class ChatGroup:
 
 
 class Permission:
-    def __init__(self, id: str, name: str, admin: bool = False, whitelist: bool = False, update_time: str = None):
+    def __init__(
+        self,
+        id: str,
+        name: str,
+        admin: bool = False,
+        whitelist: bool = False,
+        update_time: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    ):
         self.id = id
         self.name = name
         self.admin = admin
         self.whitelist = whitelist
-        self.update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.update_time = update_time
 
     def update_permission(self, admin: bool = False, whitelist: bool = False):
         self.admin = admin
@@ -227,6 +234,43 @@ class DeleteTicket:
                 setattr(self, k, v)
             else:
                 print(f"Unknow param of DeleteTicket: {k}")
+
+
+class ChangePermissionTicker:
+    FIXED_VALUES = ["id", "create_time", "creator", "creator_id"]
+
+    def __init__(
+        self,
+        id: str,
+        create_time: datetime,
+        creator: str,
+        creator_id: str,
+        operation: str = None,
+        affected_user_id: str = None,
+        affected_user: str = None,
+        approved_time: datetime = None,
+        approver: str = None,
+        approver_id: str = None,
+        status: str = None,
+    ):
+        self.id = id
+        self.create_time = create_time
+        self.creator = creator
+        self.creator_id = creator_id
+        self.operation = operation
+        self.approved_time = approved_time
+        self.affected_user_id = affected_user_id
+        self.affected_user = affected_user
+        self.approver = approver
+        self.approver_id = approver_id
+        self.status = status
+
+    def update(self, **kwargs):
+        for k, v in kwargs.items():
+            if k in self.__dict__ and k not in self.FIXED_VALUES:
+                setattr(self, k, v)
+            else:
+                print(f"Unknow param of ChangePermissionTicker: {k}")
 
 
 class Tools:
@@ -400,7 +444,7 @@ class Tools:
         return self.logger
 
     @staticmethod
-    def get_annc_id(if_test: bool) -> str:
+    def get_simple_id(if_test: bool) -> str:
         timestamp = str(int(datetime.now().timestamp() * 1000))
         return timestamp if not if_test else f"test-{timestamp}"
 

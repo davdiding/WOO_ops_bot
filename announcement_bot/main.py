@@ -1,7 +1,14 @@
 import argparse
 from datetime import datetime as dt
 
-from lib.utils import Announcement, DeleteTicket, EditTicket, Tools, init_args
+from lib.utils import (
+    Announcement,
+    ChangePermissionTicker,
+    DeleteTicket,
+    EditTicket,
+    Tools,
+    init_args,
+)
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update, request
 from telegram.ext import (
     Application,
@@ -15,6 +22,7 @@ from telegram.ext import (
 
 CATEGORY, LANGUAGE, LABELS, CONTENT = range(4)
 ANNC_ID, NEW_CONTENT = range(2)
+CHANGE_PERMISSION, CHOOSE_OPERATION, CHOOSE_PERMISSION = range(4)
 
 
 class AnnouncementBot:
@@ -57,7 +65,7 @@ class AnnouncementBot:
         await update.message.reply_text(message, reply_markup=reply_markup)
 
         inputs = {
-            "id": self.tools.get_annc_id(self.is_test),
+            "id": self.tools.get_simple_id(self.is_test),
             "operation": "post",
             "create_time": dt.now(),
             "creator": operator.full_name,
@@ -573,6 +581,107 @@ class AnnouncementBot:
         else:
             self.logger.warn(f"Unauthorized user {operator.full_name}({operator.id}) tried to delete")
 
+    async def start_change_permission(self, update: Update, context: ContextTypes) -> int:
+        """
+        Change permission of individual user
+        - Add admin and whitelist user process :
+            1. use /change_permission command to start the process
+            2. select `add` button from the keyboard (`add` or `remove` button)
+            3. select `admin` or `whitelist` or `both` button from the keyboard
+            4. share a message sent by the user to add as admin or whitelist user
+            5. ask current admin users to approve the request
+        """
+
+        operator = update.message.from_user
+        operator_full_name = self.tools.parse_full_name(operator.full_name)
+
+        if not self.tools.is_admin(operator.id):
+            await update.message.reply_text(f"Hi {operator.full_name}, You don't have permission to change permission.")
+            return ConversationHandler.END
+
+        inputs = {
+            "id": self.tools.get_simple_id(self.is_test),
+            "create_time": dt.now(),
+            "creator": operator_full_name,
+            "creator_id": operator.id,
+        }
+
+        ticker = ChangePermissionTicker(**inputs)
+
+        context.user_data["ticket"] = ticker
+
+        callback = [
+            [InlineKeyboardButton("Add", callback_data="add")],
+            [InlineKeyboardButton("Remove", callback_data="remove")],
+            [InlineKeyboardButton("Cancel", callback_data="cancel")],
+        ]
+
+        reply_markup = InlineKeyboardMarkup(callback)
+        message = f"Hello {operator_full_name}! Please choose the operation you want to do."
+        await update.message.reply_text(message, reply_markup=reply_markup)
+        return CHANGE_PERMISSION
+
+    async def choose_change_permission_operation(self, update: Update, context: ContextTypes) -> int:
+        query = update.callback_query
+        context.user_data["ticket"].operation = query.data
+        callback = [
+            InlineKeyboardButton("Admin", callback_data="admin"),
+            InlineKeyboardButton("Whitelist", callback_data="whitelist"),
+            InlineKeyboardButton("Both", callback_data="admin/whitelist"),
+            InlineKeyboardButton("Cancel", callback_data="cancel"),
+        ]
+        if query.data == "cancel":
+            return ConversationHandler.END
+
+        message = f"You have chosen to `{query.data.capitalize()}` permission, please choose the permission type."
+        await query.message.edit_text(message, reply_markup=InlineKeyboardMarkup([callback]), parse_mode="MarkdownV2")
+        return CHOOSE_OPERATION
+
+    async def choose_change_permission_type(self, update: Update, context: ContextTypes) -> int:
+        query = update.callback_query
+        context.user_data["ticket"].operation = f"{context.user_data['ticket'].operation}_{query.data}"
+
+        message = f"Please share the message sent by the user to add as `{query.data.capitalize()}` user."
+        await query.message.edit_text(message, parse_mode="MarkdownV2")
+        return CHOOSE_PERMISSION
+
+    async def choose_change_permission_user(self, update: Update, context: ContextTypes) -> int:
+        ticket: ChangePermissionTicker = context.user_data["ticket"]
+        user = update.message.forward_origin.sender_user
+
+        update_ = {
+            "affected_user": user.full_name,
+            "affected_user_id": str(user.id),
+            "status": "pending",
+        }
+        ticket.update(**update_)
+        # change permission
+
+        permissions = self.tools.init_collection("AnnouncementDB", "Permissions")
+
+        old_permission = permissions.find_one({"user_id": ticket.affected_user_id})
+        values_ = {
+            "id": ticket.affected_user_id,
+            "name": ticket.affected_user,
+            "admin": False if not old_permission else old_permission["admin"],
+            "whitelist": False if not old_permission else old_permission["whitelist"],
+            "update_time": dt.now().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+
+        o, ps = ticket.operation.split("_")
+
+        ps_list = ps.split("/")
+        for p in ps_list:
+            values_[p] = True if o == "add" else False
+
+        permissions.update_one({"id": ticket.affected_user_id}, {"$set": values_}, upsert=True)
+
+        message = f"User {ticket.affected_user} has been `{o.capitalize()}` as `{ps}` user."
+        await update.message.reply_text(message)
+
+        self.logger.info(f"User {ticket.affected_user} has been `{o.capitalize()}` as `{ps}` user by {ticket.creator}")
+        return ConversationHandler.END
+
     async def check_permission(self, update: Update, context: ContextTypes) -> ConversationHandler.END:
         operator = update.message.from_user
 
@@ -648,9 +757,26 @@ class AnnouncementBot:
             per_chat=False,
         )
 
+        change_permission_handler = ConversationHandler(
+            entry_points=[CommandHandler("change_permission", self.start_change_permission)],
+            states={
+                CHANGE_PERMISSION: [
+                    CallbackQueryHandler(self.choose_change_permission_operation, pattern="^(add|remove)$")
+                ],
+                CHOOSE_OPERATION: [
+                    CallbackQueryHandler(
+                        self.choose_change_permission_operation, pattern="^(admin|whitelist|admin_whitelist)$"
+                    )
+                ],
+                CHOOSE_PERMISSION: [MessageHandler(filters.TEXT, self.choose_change_permission_type)],
+            },
+            fallbacks=[CommandHandler("cancel", self.cancel)],
+            per_chat=False,
+        )
         application.add_handler(post_handler)
         application.add_handler(edit_handler)
         application.add_handler(delete_handler)
+        application.add_handler(change_permission_handler)
         application.add_handler(CallbackQueryHandler(self.confirmation, pattern=r"^(approve|reject)_.*"))
         application.add_handler(CallbackQueryHandler(self.edit_confirmation, pattern=r"^(edit_approve|edit_reject)_.*"))
         application.add_handler(
