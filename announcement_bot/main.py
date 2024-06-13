@@ -22,7 +22,7 @@ from telegram.ext import (
 
 CATEGORY, LANGUAGE, LABELS, CONTENT = range(4)
 ANNC_ID, NEW_CONTENT = range(2)
-CHANGE_PERMISSION, CHOOSE_OPERATION, CHOOSE_PERMISSION = range(4)
+CHANGE_PERMISSION, CHOOSE_OPERATION, CHOOSE_PERMISSION = range(3)
 
 
 class AnnouncementBot:
@@ -633,21 +633,30 @@ class AnnouncementBot:
         if query.data == "cancel":
             return ConversationHandler.END
 
-        message = f"You have chosen to `{query.data.capitalize()}` permission, please choose the permission type."
+        message = f"You have chosen to `{query.data.capitalize()}` permission, please choose the permission type\."
         await query.message.edit_text(message, reply_markup=InlineKeyboardMarkup([callback]), parse_mode="MarkdownV2")
         return CHOOSE_OPERATION
 
     async def choose_change_permission_type(self, update: Update, context: ContextTypes) -> int:
         query = update.callback_query
-        context.user_data["ticket"].operation = f"{context.user_data['ticket'].operation}_{query.data}"
+        ticket = context.user_data["ticket"]
 
-        message = f"Please share the message sent by the user to add as `{query.data.capitalize()}` user."
+        message = f"Please share the message sent by the user to `{ticket.operation.capitalize()}`  as `{query.data.capitalize()}` user\."
+
+        ticket.operation = f"{ticket.operation}_{query.data}"
+
+        context.user_data["ticket"] = ticket
         await query.message.edit_text(message, parse_mode="MarkdownV2")
         return CHOOSE_PERMISSION
 
     async def choose_change_permission_user(self, update: Update, context: ContextTypes) -> int:
         ticket: ChangePermissionTicker = context.user_data["ticket"]
-        user = update.message.forward_origin.sender_user
+        try:
+            user = update.message.forward_origin.sender_user
+        except AttributeError:
+            message = "The user does not open the privacy settings, please ask the user to open the privacy settings then try again\."
+            await update.message.reply_text(message, parse_mode="MarkdownV2")
+            return CHOOSE_PERMISSION
 
         update_ = {
             "affected_user": user.full_name,
@@ -676,8 +685,8 @@ class AnnouncementBot:
 
         permissions.update_one({"id": ticket.affected_user_id}, {"$set": values_}, upsert=True)
 
-        message = f"User {ticket.affected_user} has been `{o.capitalize()}` as `{ps}` user."
-        await update.message.reply_text(message)
+        message = f"User {ticket.affected_user} has been `{o.capitalize()}` as `{ps}` user\."
+        await update.message.reply_text(message, parse_mode="MarkdownV2")
 
         self.logger.info(f"User {ticket.affected_user} has been `{o.capitalize()}` as `{ps}` user by {ticket.creator}")
         return ConversationHandler.END
@@ -765,10 +774,10 @@ class AnnouncementBot:
                 ],
                 CHOOSE_OPERATION: [
                     CallbackQueryHandler(
-                        self.choose_change_permission_operation, pattern="^(admin|whitelist|admin_whitelist)$"
+                        self.choose_change_permission_type, pattern="^(admin|whitelist|admin/whitelist)$"
                     )
                 ],
-                CHOOSE_PERMISSION: [MessageHandler(filters.TEXT, self.choose_change_permission_type)],
+                CHOOSE_PERMISSION: [MessageHandler(filters.TEXT, self.choose_change_permission_user)],
             },
             fallbacks=[CommandHandler("cancel", self.cancel)],
             per_chat=False,
