@@ -27,3 +27,7 @@ class Tools:
     @staticmethod
     def get_datetime() -> str:
         return dt.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    @staticmethod
+    def get_timestamp() -> int:
+        return int(dt.now().timestamp() * 1000)
