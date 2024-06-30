@@ -53,7 +53,7 @@ class Monitor:
             raw_results = await asyncio.gather(*tasks)
 
             for ccy, ticker in zip(ccys[i : i + batch_size], raw_results):
-                last_prices[ccy] = ticker[f"{ccy}/USDT:USDT"]["last_price"]
+                last_prices[ccy] = ticker[f"{ccy}/USDT:USDT"]["last"]
 
         await self.binance.close()
         return last_prices

@@ -15,4 +15,4 @@ log/
 announcement_bot/db/files
 test.py
 gc_credential.json
-~.log
+trade_bot/binance_bot/margin_bot.log
