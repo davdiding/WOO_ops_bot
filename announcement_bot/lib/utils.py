@@ -770,6 +770,7 @@ class Tools:
         method_map = {
             "photo": bot.send_photo,
             "video": bot.send_video,
+            "document": bot.send_document,
             "text": bot.send_message,
         }
         num_per_batch = 20
