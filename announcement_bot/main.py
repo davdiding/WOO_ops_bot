@@ -156,6 +156,7 @@ class AnnouncementBot:
         # check content type
         photo = message.photo
         video = message.video
+        document = message.document
         content_text = message.caption if message.caption else message.text if message.text else ""
         content_html = message.caption_html if message.caption_html else message.text_html if message.text_html else ""
 
@@ -167,7 +168,12 @@ class AnnouncementBot:
             file_id = video.file_id
             annc_type = "video"
 
+        elif document is not None:
+            file_id = document.file_id
+            annc_type = "document"
+
         else:  # Only text condition
+            print(document, document is None)
             file_id = ""
             annc_type = "text"
 
@@ -187,6 +193,7 @@ class AnnouncementBot:
         method_map = {
             "photo": context.bot.send_photo,
             "video": context.bot.send_video,
+            "document": context.bot.send_document,
             "text": context.bot.send_message,
         }
 
@@ -210,7 +217,7 @@ class AnnouncementBot:
         await context.bot.send_message(**inputs)
 
         # send out second part of confirm message, to check the announcement content
-        if annc_type in ["photo", "video"]:
+        if annc_type in ["photo", "video", "document"]:
             inputs = {
                 "chat_id": chat_id,
                 annc_type: file["id"],
@@ -739,7 +746,8 @@ class AnnouncementBot:
                 LABELS: [MessageHandler(filters.TEXT, self.choose_labels)],
                 CONTENT: [
                     MessageHandler(
-                        filters.TEXT & (~filters.COMMAND) | filters.PHOTO | filters.VIDEO, self.choose_content
+                        filters.TEXT & (~filters.COMMAND) | filters.PHOTO | filters.VIDEO | filters.Document.ALL,
+                        self.choose_content,
                     )
                 ],
             },
