@@ -173,7 +173,6 @@ class AnnouncementBot:
             annc_type = "document"
 
         else:  # Only text condition
-            print(document, document is None)
             file_id = ""
             annc_type = "text"
 
@@ -398,8 +397,6 @@ class AnnouncementBot:
         ticket_id = query.data.split("_")[-1]
         ticket = self.tools.get_edit_ticket_by_id(ticket_id)
 
-        print(status, ticket_id)
-
         operator = update.effective_user
 
         if self.tools.is_admin(operator.id):
@@ -555,7 +552,6 @@ class AnnouncementBot:
         status = response.split("_")[1]
         delete_id = response.split("_")[2]
         ticket = self.tools.get_delete_ticket_by_id(delete_id)
-        print(ticket.id, status)
 
         operator = update.effective_user
         if self.tools.is_admin(operator.id):
